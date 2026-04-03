@@ -26,7 +26,7 @@ pub async fn execute(cli: Cli) -> i32 {
         Commands::List { json } => handle_list(&config, json).await,
         Commands::Inspect { slug, json } => handle_inspect(&config, &slug, json).await,
         Commands::Logs { slug, follow } => handle_logs(&config, &slug, follow).await,
-        Commands::Stop { slug } => handle_stop(&config, &slug).await,
+        Commands::Stop { slug, all } => handle_stop(&config, slug.as_deref(), all).await,
         Commands::Doctor { slug, json } => handle_doctor(&config, slug.as_deref(), json).await,
         Commands::Daemon { command } => handle_daemon(&config, command).await,
         Commands::Tunnel { command } => handle_tunnel(&config, command).await,
@@ -226,7 +226,62 @@ async fn handle_logs(config: &Config, slug: &str, follow: bool) -> i32 {
 }
 
 /// Handle `stop` command.
-async fn handle_stop(config: &Config, slug: &str) -> i32 {
+async fn handle_stop(config: &Config, slug: Option<&str>, all: bool) -> i32 {
+    if all {
+        // Stop all mounts
+        let list_request = AdminRequest::MountList;
+        let slugs = match send_admin_request(config, &list_request) {
+            Ok(AdminResponse::Ok { data }) => {
+                data["mounts"].as_array()
+                    .map(|arr| arr.iter()
+                        .filter_map(|m| m["slug"].as_str().map(String::from))
+                        .collect::<Vec<_>>())
+                    .unwrap_or_default()
+            }
+            Ok(AdminResponse::Error { message, code }) => {
+                eprintln!("Error: {message}");
+                return code;
+            }
+            Err(e) => {
+                eprintln!("Error: {e}");
+                return exit_codes::DAEMON_UNAVAILABLE;
+            }
+        };
+
+        if slugs.is_empty() {
+            println!("No mounts to stop.");
+            return exit_codes::SUCCESS;
+        }
+
+        let mut total_sessions = 0u64;
+        for s in &slugs {
+            let request = AdminRequest::MountDelete { slug: s.clone() };
+            match send_admin_request(config, &request) {
+                Ok(AdminResponse::Ok { data }) => {
+                    let sessions = data["sessions_terminated"].as_u64().unwrap_or(0);
+                    total_sessions += sessions;
+                    println!("Stopped '{s}' ({sessions} session(s))");
+                }
+                Ok(AdminResponse::Error { message, .. }) => {
+                    eprintln!("Failed to stop '{s}': {message}");
+                }
+                Err(e) => {
+                    eprintln!("Failed to stop '{s}': {e}");
+                }
+            }
+        }
+        println!("All {} mount(s) stopped. {total_sessions} session(s) terminated.", slugs.len());
+        return exit_codes::SUCCESS;
+    }
+
+    let slug = match slug {
+        Some(s) => s,
+        None => {
+            eprintln!("Error: provide a mount slug or use --all");
+            return exit_codes::CLI_USAGE;
+        }
+    };
+
     let request = AdminRequest::MountDelete { slug: slug.to_string() };
     match send_admin_request(config, &request) {
         Ok(AdminResponse::Ok { data }) => {

@@ -48,8 +48,11 @@ pub enum Commands {
 
     /// Remove a mount and terminate its sessions.
     Stop {
-        /// Mount slug.
-        slug: String,
+        /// Mount slug (omit when using --all).
+        slug: Option<String>,
+        /// Stop all mounts.
+        #[arg(long)]
+        all: bool,
     },
 
     /// Run environment + protocol diagnostics.
