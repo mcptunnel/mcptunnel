@@ -13,6 +13,7 @@ pub enum AdminRequest {
     MountDelete { slug: String },
     MountList,
     MountInspect { slug: String },
+    MountLogsTail { slug: String, lines: Option<usize> },
     DaemonStatus,
     TunnelStatus,
     DoctorRun { slug: Option<String> },
@@ -57,6 +58,7 @@ pub async fn handle_admin_request(
         AdminRequest::MountDelete { slug } => handle_mount_delete(state, &slug).await,
         AdminRequest::MountList => handle_mount_list(state).await,
         AdminRequest::MountInspect { slug } => handle_mount_inspect(state, &slug).await,
+        AdminRequest::MountLogsTail { slug, lines } => handle_mount_logs(state, &slug, lines.unwrap_or(50)).await,
         AdminRequest::DaemonStatus => handle_daemon_status(state).await,
         AdminRequest::TunnelStatus => handle_tunnel_status(state).await,
         AdminRequest::DoctorRun { slug } => handle_doctor_run(state, slug.as_deref()).await,
@@ -244,6 +246,26 @@ async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminRespons
             "created_at": mount.created_at.to_rfc3339(),
             "last_probe": mount.last_probe_result,
             "policy": mount.policy,
+        }),
+    }
+}
+
+async fn handle_mount_logs(state: &Arc<AppState>, slug: &str, lines: usize) -> AdminResponse {
+    // Check mount exists
+    match state.mount_registry.get(slug) {
+        Ok(Some(_)) => {}
+        _ => return AdminResponse::Error {
+            message: format!("mount '{slug}' not found"),
+            code: crate::error::exit_codes::MOUNT_NOT_FOUND,
+        },
+    }
+
+    let log_lines = state.get_logs(slug, lines).await;
+    AdminResponse::Ok {
+        data: serde_json::json!({
+            "slug": slug,
+            "lines": log_lines,
+            "count": log_lines.len(),
         }),
     }
 }

@@ -174,11 +174,55 @@ async fn handle_inspect(config: &Config, slug: &str, json: bool) -> i32 {
 }
 
 /// Handle `logs` command.
-async fn handle_logs(_config: &Config, slug: &str, _follow: bool) -> i32 {
-    // In MVP, logs are available via structured logging output
-    eprintln!("Logs for mount '{slug}' — check daemon log output.");
-    eprintln!("Structured logs are written to stderr of the daemon process.");
-    exit_codes::SUCCESS
+async fn handle_logs(config: &Config, slug: &str, follow: bool) -> i32 {
+    let request = AdminRequest::MountLogsTail {
+        slug: slug.to_string(),
+        lines: Some(100),
+    };
+    match send_admin_request(config, &request) {
+        Ok(AdminResponse::Ok { data }) => {
+            if let Some(lines) = data["lines"].as_array() {
+                for line in lines {
+                    if let Some(s) = line.as_str() {
+                        println!("{s}");
+                    }
+                }
+                if lines.is_empty() {
+                    println!("No log entries for mount '{slug}'.");
+                }
+            }
+
+            if follow {
+                eprintln!("(--follow: polling every 2 seconds, Ctrl+C to stop)");
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    let request = AdminRequest::MountLogsTail {
+                        slug: slug.to_string(),
+                        lines: Some(5),
+                    };
+                    if let Ok(AdminResponse::Ok { data }) = send_admin_request(config, &request) {
+                        if let Some(lines) = data["lines"].as_array() {
+                            for line in lines {
+                                if let Some(s) = line.as_str() {
+                                    println!("{s}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            exit_codes::SUCCESS
+        }
+        Ok(AdminResponse::Error { message, code }) => {
+            eprintln!("Error: {message}");
+            code
+        }
+        Err(e) => {
+            eprintln!("Error: {e}");
+            exit_codes::DAEMON_UNAVAILABLE
+        }
+    }
 }
 
 /// Handle `stop` command.

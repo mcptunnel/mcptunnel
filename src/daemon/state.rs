@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::auth::oauth::JwksCache;
 use crate::config::Config;
 use crate::mount::MountRegistry;
 use crate::session::SessionManager;
@@ -16,6 +17,9 @@ pub struct AppState {
     pub tunnel_origin: RwLock<Option<String>>,
     pub daemon_instance_id: String,
     pub upstream_children: RwLock<HashMap<String, UpstreamChild>>,
+    pub jwks_cache: Arc<JwksCache>,
+    /// Per-mount log ring buffers: mount_slug -> Vec<log_line>.
+    pub mount_logs: RwLock<HashMap<String, Vec<String>>>,
 }
 
 impl AppState {
@@ -31,6 +35,8 @@ impl AppState {
             tunnel_origin: RwLock::new(None),
             daemon_instance_id: uuid::Uuid::new_v4().to_string(),
             upstream_children: RwLock::new(HashMap::new()),
+            jwks_cache: Arc::new(JwksCache::new()),
+            mount_logs: RwLock::new(HashMap::new()),
         }
     }
 
@@ -45,5 +51,29 @@ impl AppState {
         let origin = self.tunnel_origin.read().await.clone()
             .unwrap_or_else(|| format!("http://{}", self.config.daemon.bind));
         format!("{}/{}/mcp", origin, slug)
+    }
+
+    /// Append a log line for a mount (ring buffer, max 1000 lines).
+    pub async fn append_log(&self, slug: &str, line: String) {
+        let mut logs = self.mount_logs.write().await;
+        let entries = logs.entry(slug.to_string()).or_insert_with(Vec::new);
+        entries.push(line);
+        // Keep only the last 1000 lines
+        if entries.len() > 1000 {
+            let drain_count = entries.len() - 1000;
+            entries.drain(..drain_count);
+        }
+    }
+
+    /// Get log lines for a mount.
+    pub async fn get_logs(&self, slug: &str, tail: usize) -> Vec<String> {
+        let logs = self.mount_logs.read().await;
+        match logs.get(slug) {
+            Some(entries) => {
+                let start = entries.len().saturating_sub(tail);
+                entries[start..].to_vec()
+            }
+            None => vec![],
+        }
     }
 }

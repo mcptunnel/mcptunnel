@@ -1,8 +1,178 @@
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 use super::types::{OAuthConfig, ProtectedResourceMetadata, TokenClaims};
+
+/// Cached JWKS keys for token validation.
+pub struct JwksCache {
+    /// Map from key ID (kid) to DecodingKey.
+    keys: RwLock<HashMap<String, DecodingKey>>,
+    /// The JWKS endpoint URL.
+    jwks_uri: RwLock<Option<String>>,
+    /// Last fetch time.
+    last_fetched: RwLock<Option<chrono::DateTime<chrono::Utc>>>,
+}
+
+impl JwksCache {
+    pub fn new() -> Self {
+        Self {
+            keys: RwLock::new(HashMap::new()),
+            jwks_uri: RwLock::new(None),
+            last_fetched: RwLock::new(None),
+        }
+    }
+
+    /// Fetch JWKS from the issuer's discovery endpoint and cache the keys.
+    pub async fn refresh(&self, issuer: &str) -> Result<(), String> {
+        // Discover JWKS URI from OpenID Connect discovery
+        let discovery_url = format!("{}/.well-known/openid-configuration", issuer.trim_end_matches('/'));
+
+        let client = reqwest::Client::new();
+        let discovery: serde_json::Value = client
+            .get(&discovery_url)
+            .send()
+            .await
+            .map_err(|e| format!("OIDC discovery fetch failed: {e}"))?
+            .json()
+            .await
+            .map_err(|e| format!("OIDC discovery parse failed: {e}"))?;
+
+        let jwks_uri = discovery
+            .get("jwks_uri")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "No jwks_uri in OIDC discovery".to_string())?;
+
+        // Fetch JWKS
+        let jwks: JwksResponse = client
+            .get(jwks_uri)
+            .send()
+            .await
+            .map_err(|e| format!("JWKS fetch failed: {e}"))?
+            .json()
+            .await
+            .map_err(|e| format!("JWKS parse failed: {e}"))?;
+
+        // Parse keys
+        let mut key_map = HashMap::new();
+        for key in &jwks.keys {
+            if key.kty != "RSA" {
+                continue;
+            }
+            let Some(ref kid) = key.kid else { continue };
+            let Some(ref n) = key.n else { continue };
+            let Some(ref e) = key.e else { continue };
+
+            match DecodingKey::from_rsa_components(n, e) {
+                Ok(dk) => {
+                    key_map.insert(kid.clone(), dk);
+                }
+                Err(err) => {
+                    warn!(kid = kid, error = %err, "Failed to parse RSA key from JWKS");
+                }
+            }
+        }
+
+        if key_map.is_empty() {
+            return Err("No usable RSA keys found in JWKS".to_string());
+        }
+
+        info!(keys = key_map.len(), jwks_uri = jwks_uri, "JWKS cache refreshed");
+        *self.keys.write().await = key_map;
+        *self.jwks_uri.write().await = Some(jwks_uri.to_string());
+        *self.last_fetched.write().await = Some(chrono::Utc::now());
+        Ok(())
+    }
+
+    /// Get a decoding key by key ID.
+    pub async fn get_key(&self, kid: &str) -> Option<DecodingKey> {
+        self.keys.read().await.get(kid).cloned()
+    }
+
+    /// Get any available key (when token has no kid).
+    pub async fn get_any_key(&self) -> Option<DecodingKey> {
+        self.keys.read().await.values().next().cloned()
+    }
+
+    /// Check if cache needs refresh (older than 1 hour).
+    pub async fn needs_refresh(&self) -> bool {
+        match *self.last_fetched.read().await {
+            Some(t) => {
+                let age = chrono::Utc::now() - t;
+                age.num_seconds() > 3600
+            }
+            None => true,
+        }
+    }
+
+    /// Check if cache has any keys.
+    pub async fn has_keys(&self) -> bool {
+        !self.keys.read().await.is_empty()
+    }
+}
+
+/// JWKS response structure.
+#[derive(Debug, Deserialize)]
+struct JwksResponse {
+    keys: Vec<JwkKey>,
+}
+
+/// A single JWK key.
+#[derive(Debug, Deserialize)]
+struct JwkKey {
+    kty: String,
+    kid: Option<String>,
+    n: Option<String>,
+    e: Option<String>,
+    #[serde(rename = "use")]
+    use_: Option<String>,
+    alg: Option<String>,
+}
+
+/// Validate a bearer token using the JWKS cache.
+pub async fn validate_bearer_token_with_cache(
+    auth_header: Option<&str>,
+    config: &OAuthConfig,
+    cache: &JwksCache,
+) -> Result<TokenClaims, TokenValidationError> {
+    let token = extract_bearer_token(auth_header)?;
+
+    // Refresh JWKS if needed
+    if cache.needs_refresh().await {
+        if let Err(e) = cache.refresh(&config.issuer).await {
+            // If we have cached keys, warn and continue; otherwise fail
+            if !cache.has_keys().await {
+                return Err(TokenValidationError::InvalidToken(
+                    format!("JWKS fetch failed and no cached keys: {e}"),
+                ));
+            }
+            warn!(error = %e, "JWKS refresh failed, using cached keys");
+        }
+    }
+
+    // Decode header to get kid
+    let header = decode_header(&token)
+        .map_err(|e| TokenValidationError::InvalidToken(format!("invalid token header: {e}")))?;
+
+    // Find the right key
+    let decoding_key = if let Some(ref kid) = header.kid {
+        cache.get_key(kid).await
+            .ok_or_else(|| TokenValidationError::InvalidToken(
+                format!("key ID '{kid}' not found in JWKS")
+            ))?
+    } else {
+        cache.get_any_key().await
+            .ok_or_else(|| TokenValidationError::InvalidToken(
+                "no keys in JWKS cache".to_string()
+            ))?
+    };
+
+    validate_bearer_token(Some(&format!("Bearer {token}")), config, &decoding_key)
+}
 
 /// Validate a bearer token from the Authorization header.
 pub fn validate_bearer_token(
@@ -51,7 +221,7 @@ pub fn check_scopes(claims: &TokenClaims, required: &[String]) -> bool {
 }
 
 /// Extract bearer token from Authorization header.
-fn extract_bearer_token(header: Option<&str>) -> Result<String, TokenValidationError> {
+pub fn extract_bearer_token(header: Option<&str>) -> Result<String, TokenValidationError> {
     let header = header.ok_or(TokenValidationError::MissingToken)?;
     let token = header
         .strip_prefix("Bearer ")
@@ -194,5 +364,12 @@ mod tests {
         );
         assert_eq!(result["result"]["isError"], true);
         assert!(result["result"]["_meta"]["mcp/www_authenticate"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_jwks_cache_needs_refresh() {
+        let cache = JwksCache::new();
+        assert!(cache.needs_refresh().await);
+        assert!(!cache.has_keys().await);
     }
 }

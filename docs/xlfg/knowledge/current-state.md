@@ -30,7 +30,5 @@ src/
 35 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers, logging utilities, tunnel URL parsing.
 
 ## Known Gaps
-- Full JWT signature validation requires JWKS fetching/caching (current OAuth gate checks token format only)
-- SSE stream sends keepalives; server-initiated notifications from upstream not yet forwarded
-- `logs` command shows guidance only (no log streaming from daemon)
+- SSE stream currently sends keepalives; server-initiated notifications from upstream not yet forwarded to SSE clients
 - Tunnel is not auto-started as part of daemon startup (must be started via future tunnel management)

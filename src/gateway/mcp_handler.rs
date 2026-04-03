@@ -67,6 +67,15 @@ pub async fn handle_post_mcp(
         "Request completed"
     );
 
+    // Append to mount log ring buffer
+    let log_line = format!(
+        "{} method={} duration={}ms",
+        chrono::Utc::now().to_rfc3339(),
+        method,
+        duration.as_millis()
+    );
+    state.append_log(&slug, log_line).await;
+
     (StatusCode::OK, resp_headers, Json(result))
 }
 
@@ -568,24 +577,51 @@ async fn check_oauth_auth(
         ));
     }
 
-    // Token present — for full validation we would need the JWKS/DecodingKey.
-    // In the MVP, we validate the token format and log the attempt.
-    // Full JWKS fetching and caching is a follow-up enhancement.
-    let token = auth_header.unwrap();
-    if !token.starts_with("Bearer ") && !token.starts_with("bearer ") {
-        warn!(slug = %mount.slug, "OAuth: invalid authorization header format");
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            HeaderMap::new(),
-            json!({"error": "invalid authorization header, expected Bearer token"}),
-        ));
-    }
+    // Validate token using JWKS cache
+    let oauth_cfg = crate::auth::types::OAuthConfig {
+        issuer: oauth_config.issuer.clone(),
+        authorization_servers: oauth_config.authorization_servers.clone(),
+        default_scopes: oauth_config.default_scopes.clone(),
+        audience: None,
+    };
 
-    // Token format is valid — allow the request through.
-    // NOTE: Full JWT signature/claims validation requires JWKS fetching which
-    // is deferred to a follow-up. The auth enforcement gate is now active.
-    info!(slug = %mount.slug, "OAuth: bearer token accepted (format check)");
-    Ok(())
+    match crate::auth::oauth::validate_bearer_token_with_cache(
+        auth_header,
+        &oauth_cfg,
+        &state.jwks_cache,
+    ).await {
+        Ok(claims) => {
+            // Check required scopes
+            if !crate::auth::oauth::check_scopes(&claims, &oauth_config.default_scopes) {
+                warn!(slug = %mount.slug, "OAuth: insufficient scope");
+                let tunnel_origin = state.tunnel_origin.read().await.clone()
+                    .unwrap_or_else(|| "https://localhost".to_string());
+                let resource_metadata_url = format!(
+                    "{}/{}/.well-known/oauth-protected-resource",
+                    tunnel_origin, mount.slug
+                );
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    HeaderMap::new(),
+                    json!({"error": "insufficient scope", "required_scopes": oauth_config.default_scopes}),
+                ));
+            }
+            info!(
+                slug = %mount.slug,
+                subject = claims.subject.as_deref().unwrap_or("unknown"),
+                "OAuth: token validated"
+            );
+            Ok(())
+        }
+        Err(e) => {
+            warn!(slug = %mount.slug, error = %e, "OAuth: token validation failed");
+            Err((
+                StatusCode::UNAUTHORIZED,
+                HeaderMap::new(),
+                json!({"error": format!("token validation failed: {e}")}),
+            ))
+        }
+    }
 }
 
 /// Extract MCP-Session-Id from headers.
