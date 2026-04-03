@@ -114,11 +114,19 @@ impl Drop for CloudflaredSupervisor {
 
 /// Parse a tunnel URL from cloudflared output.
 fn parse_tunnel_url(line: &str) -> Option<String> {
-    // Look for HTTPS URLs with trycloudflare.com or custom domains
+    // Look for HTTPS URLs — only accept trycloudflare.com or non-cloudflare custom domains.
+    // Exclude cloudflare documentation/marketing URLs.
     for word in line.split_whitespace() {
         if word.starts_with("https://") && word.contains('.') {
             // Clean trailing punctuation
             let clean = word.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '/');
+            // Skip cloudflare documentation and marketing URLs
+            if clean.contains("developers.cloudflare.com")
+                || clean.contains("cloudflare.com/cloudflare-one")
+                || clean.contains("dash.cloudflare.com")
+            {
+                continue;
+            }
             return Some(clean.to_string());
         }
     }
