@@ -428,15 +428,25 @@ pub async fn handle_get_mcp(
     // Send initial keepalive
     let _ = tx.send(Ok(": keepalive\n\n".to_string())).await;
 
-    // Spawn a task that sends periodic keepalives and would forward
-    // server-initiated notifications from the upstream child
+    // Register SSE sender so notifications can be forwarded to this client
+    if let Some(ref sid) = session_id {
+        state.register_sse_sender(sid, tx.clone()).await;
+    }
+
+    // Spawn keepalive task; cleans up SSE sender on disconnect
     let keep_alive_tx = tx.clone();
+    let cleanup_state = state.clone();
+    let cleanup_sid = session_id.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
         loop {
             interval.tick().await;
             if keep_alive_tx.send(Ok(": keepalive\n\n".to_string())).await.is_err() {
-                break; // Client disconnected
+                // Client disconnected — clean up SSE sender
+                if let Some(ref sid) = cleanup_sid {
+                    cleanup_state.remove_sse_sender(sid).await;
+                }
+                break;
             }
         }
     });

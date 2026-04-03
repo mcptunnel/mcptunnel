@@ -5,7 +5,7 @@ use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::config::Config;
 use crate::gateway;
@@ -99,6 +99,54 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
                 Err(e) => {
                     error!(error = %e, "Admin API accept error");
                 }
+            }
+        }
+    });
+
+    // Auto-start tunnel
+    let tunnel_state = state.clone();
+    let tunnel_config = config.clone();
+    tokio::spawn(async move {
+        info!(mode = %tunnel_config.tunnel.default_mode, "Starting tunnel");
+        match tunnel_config.tunnel.default_mode {
+            crate::config::TunnelMode::Quick => {
+                let mut tunnel = crate::tunnel::quick::QuickTunnel::new(
+                    &tunnel_config.tunnel.cloudflared_path,
+                    &tunnel_config.daemon.bind,
+                );
+                match tunnel.start().await {
+                    Ok(url) => {
+                        info!(url = %url, "Quick tunnel ready");
+                        tunnel_state.set_tunnel_origin(Some(url)).await;
+                        // Keep tunnel alive — wait for process to exit
+                        loop {
+                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                            let status = tunnel.status();
+                            if status.status == crate::tunnel::TunnelState::Failed {
+                                warn!("Quick tunnel failed, restarting...");
+                                match tunnel.start().await {
+                                    Ok(new_url) => {
+                                        info!(url = %new_url, "Quick tunnel restarted");
+                                        tunnel_state.set_tunnel_origin(Some(new_url)).await;
+                                    }
+                                    Err(e) => {
+                                        error!(error = %e, "Quick tunnel restart failed");
+                                        tunnel_state.set_tunnel_origin(None).await;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!(error = %e, "Failed to start quick tunnel");
+                        tunnel_state.set_tunnel_origin(None).await;
+                    }
+                }
+            }
+            crate::config::TunnelMode::Managed => {
+                // Managed mode requires explicit hostname configuration
+                // It will be started when a mount with managed tunnel mode is created
+                info!("Managed tunnel mode — tunnel starts with mount creation");
             }
         }
     });

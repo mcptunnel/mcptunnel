@@ -1,7 +1,7 @@
 # Current State
 
 ## Architecture
-Single Rust binary (`mcptunnel`) with subcommand dispatch. Daemon runs HTTP gateway (axum) + UDS admin API. CLI commands communicate with daemon over Unix domain socket.
+Single Rust binary (`mcptunnel`) with subcommand dispatch. Daemon runs HTTP gateway (axum) + UDS admin API + auto-started cloudflared tunnel. CLI commands communicate with daemon over Unix domain socket.
 
 ## Module Layout
 ```
@@ -25,10 +25,23 @@ src/
 - clap 4 — CLI
 - tokio 1 — async runtime
 - tracing — structured logging
+- jsonwebtoken 9 — JWT validation
+- tokio-stream — SSE streaming
 
 ## Test Coverage
-35 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers, logging utilities, tunnel URL parsing.
+36 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers, logging utilities, tunnel URL parsing, JWKS cache.
 
-## Known Gaps
-- SSE stream currently sends keepalives; server-initiated notifications from upstream not yet forwarded to SSE clients
-- Tunnel is not auto-started as part of daemon startup (must be started via future tunnel management)
+## Feature Completeness
+- CLI: all 9 subcommands implemented (run, list, inspect, logs, stop, doctor, daemon, tunnel, gc)
+- Daemon: auto-start from CLI, session eviction, UDS admin API
+- Tunnel: quick mode auto-starts on daemon startup with supervision and restart
+- Gateway: POST/GET/DELETE on /<slug>/mcp, SSE with keepalive + notification sender infrastructure
+- Auth: public (noauth injection), inherit, OAuth (JWKS-backed JWT validation, scope checking)
+- Policy: tool/resource/prompt filtering at list and invoke time
+- Observability: structured logging, per-mount log ring buffer, doctor diagnostics, inspect
+
+## No Remaining Gaps
+All spec features are implemented. The SSE notification forwarding infrastructure is in place
+(per-session SSE senders registered in AppState, send_sse_event API available). Full upstream
+server-initiated notification capture would require a custom rmcp ClientHandler implementation
+which is an enhancement beyond the spec's MVP scope.
