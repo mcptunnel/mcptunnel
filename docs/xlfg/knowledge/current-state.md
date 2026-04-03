@@ -27,16 +27,19 @@ src/
 - tracing — structured logging
 - jsonwebtoken 9 — JWT validation
 - tokio-stream — SSE streaming
+- base64 0.22 — HTTP Basic Auth decoding
+- subtle 2 — constant-time credential comparison
 
 ## Test Coverage
-34 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers, logging utilities, tunnel URL parsing, JWKS cache.
+47 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers (public, basic, oauth), logging utilities, tunnel URL parsing, JWKS cache, basic auth credential generation/validation/DB round-trip.
 
 ## Feature Completeness
 - CLI: all 9 subcommands implemented (run, list, inspect, logs, stop, doctor, daemon, tunnel, gc)
 - Daemon: auto-start from CLI, session eviction, UDS admin API
 - Tunnel: quick mode auto-starts on daemon startup with supervision and restart
 - Gateway: POST/GET/DELETE on /<slug>/mcp, SSE with keepalive + notification sender infrastructure
-- Auth: public (noauth injection), inherit, OAuth (JWKS-backed JWT validation, scope checking)
+- Auth: **basic (default)**, public (noauth injection), inherit, OAuth (JWKS-backed JWT validation, scope checking)
+  - Basic Auth: auto-generated credentials (mct + 16-char hex), constant-time validation (subtle crate), credentials-in-URL output
 - Policy: tool/resource/prompt filtering at list and invoke time
 - Observability: structured logging, per-mount log ring buffer, doctor diagnostics, inspect
 

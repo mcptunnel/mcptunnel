@@ -74,6 +74,8 @@ async fn handle_mount_create(
         _ => state.config.tunnel.default_mode,
     };
     let auth_mode = match req.auth_mode.as_deref() {
+        Some("public") => AuthModeConfig::Public,
+        Some("basic") => AuthModeConfig::Basic,
         Some("inherit") => AuthModeConfig::Inherit,
         Some("oauth") => AuthModeConfig::OAuth,
         _ => state.config.defaults.auth_mode,
@@ -95,6 +97,7 @@ async fn handle_mount_create(
         tunnel_mode,
         hostname: req.hostname,
         auth_mode,
+        basic_credentials: None,
         oauth_config: None,
         policy: crate::policy::types::PolicyConfig {
             allow_tools: req.allow_tools,
@@ -139,6 +142,11 @@ async fn handle_mount_create(
 
     let public_url = state.public_url(&record.slug).await;
 
+    // Build credentials URL if Basic Auth
+    let credentials_url = record.basic_credentials.as_ref().map(|creds| {
+        crate::auth::basic::build_credentials_url(&public_url, creds)
+    });
+
     AdminResponse::Ok {
         data: serde_json::json!({
             "mount": {
@@ -148,6 +156,7 @@ async fn handle_mount_create(
                 "auth_mode": auth_mode.to_string(),
                 "tunnel_mode": tunnel_mode.to_string(),
                 "public_url": public_url,
+                "credentials_url": credentials_url,
             }
         }),
     }
@@ -232,6 +241,10 @@ async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminRespons
     let sessions = state.session_manager.active_count(slug).await;
     let public_url = state.public_url(slug).await;
 
+    let credentials_url = mount.basic_credentials.as_ref().map(|creds| {
+        crate::auth::basic::build_credentials_url(&public_url, creds)
+    });
+
     AdminResponse::Ok {
         data: serde_json::json!({
             "slug": mount.slug,
@@ -241,6 +254,7 @@ async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminRespons
             "tunnel_mode": mount.tunnel_mode.to_string(),
             "command": format!("{} {}", mount.command.program, mount.command.args.join(" ")),
             "public_url": public_url,
+            "credentials_url": credentials_url,
             "active_sessions": sessions,
             "created_at": mount.created_at.to_rfc3339(),
             "last_probe": mount.last_probe_result,

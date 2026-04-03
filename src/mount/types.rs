@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::auth::basic::BasicAuthCredentials;
 use crate::config::{AuthModeConfig, TunnelMode};
 use crate::policy::types::PolicyConfig;
 
@@ -14,6 +15,7 @@ pub struct MountRecord {
     pub command: CommandConfig,
     pub cwd: Option<String>,
     pub auth_mode: AuthModeConfig,
+    pub basic_credentials: Option<BasicAuthCredentials>,
     pub oauth_config: Option<OAuthMountConfig>,
     pub policy: PolicyConfig,
     pub tunnel_mode: TunnelMode,
@@ -88,6 +90,7 @@ pub struct MountCreateParams {
     pub tunnel_mode: TunnelMode,
     pub hostname: Option<String>,
     pub auth_mode: AuthModeConfig,
+    pub basic_credentials: Option<BasicAuthCredentials>,
     pub oauth_config: Option<OAuthMountConfig>,
     pub policy: PolicyConfig,
     pub env_vars: Vec<(String, String)>,

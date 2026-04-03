@@ -1,1 +1,2 @@
 {"ts":"2026-04-03T13:50:00Z","run":"run-20260403-134256","type":"policy","event":"zero-warning build policy adopted","detail":"Resolved 39 warnings. Harness now enforces cargo build with 0 warnings."}
+{"ts":"2026-04-03T15:55:00Z","run":"run-20260403-154105","type":"feature","event":"HTTP Basic Auth added as default auth mode","detail":"New auth/basic.rs with constant-time validation. Default flipped from public to basic. 12 new tests. Security review fixed: timing side-channel, credential leakage in list, oversized header DoS, unauthenticated DELETE."}

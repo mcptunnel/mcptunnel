@@ -5,6 +5,7 @@ pub mod types;
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 
+use crate::config::AuthModeConfig;
 use crate::error::{McpTunnelError, Result};
 use types::{MountCreateParams, MountRecord, MountStatus};
 
@@ -46,6 +47,15 @@ impl MountRegistry {
             .display_name
             .unwrap_or_else(|| mount_slug.clone());
 
+        // Auto-generate Basic Auth credentials if auth mode is Basic and none provided
+        let basic_credentials = if params.auth_mode == AuthModeConfig::Basic {
+            params.basic_credentials.or_else(|| {
+                Some(crate::auth::basic::generate_credentials())
+            })
+        } else {
+            params.basic_credentials
+        };
+
         let now = chrono::Utc::now();
         let record = MountRecord {
             id: uuid::Uuid::new_v4(),
@@ -54,6 +64,7 @@ impl MountRegistry {
             command: params.command,
             cwd: params.cwd,
             auth_mode: params.auth_mode,
+            basic_credentials,
             oauth_config: params.oauth_config,
             policy: params.policy,
             tunnel_mode: params.tunnel_mode,

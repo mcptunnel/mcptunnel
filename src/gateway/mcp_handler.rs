@@ -32,6 +32,13 @@ pub async fn handle_post_mcp(
         }
     };
 
+    // Basic Auth enforcement
+    if mount.auth_mode == AuthModeConfig::Basic {
+        if let Err(resp) = check_basic_auth(&mount, &headers) {
+            return (resp.0, resp.1, Json(resp.2));
+        }
+    }
+
     // OAuth enforcement — check bearer token before dispatching
     if mount.auth_mode == AuthModeConfig::OAuth {
         let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("");
@@ -403,6 +410,13 @@ pub async fn handle_get_mcp(
         ).into_response();
     }
 
+    // Basic Auth check for managed mode
+    if mount.auth_mode == AuthModeConfig::Basic {
+        if let Err(resp) = check_basic_auth(&mount, &headers) {
+            return (resp.0, Json(resp.2)).into_response();
+        }
+    }
+
     // OAuth check for managed mode
     if mount.auth_mode == AuthModeConfig::OAuth {
         if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
@@ -473,6 +487,17 @@ pub async fn handle_delete_mcp(
     Path(slug): Path<String>,
     headers: HeaderMap,
 ) -> (StatusCode, Json<Value>) {
+    // Auth check
+    let mount = match state.mount_registry.get(&slug) {
+        Ok(Some(m)) => m,
+        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "mount not found"}))),
+    };
+    if mount.auth_mode == AuthModeConfig::Basic {
+        if let Err(resp) = check_basic_auth(&mount, &headers) {
+            return (resp.0, Json(resp.2));
+        }
+    }
+
     let session_id = match get_session_id(&headers) {
         Some(sid) => sid,
         None => {
@@ -628,6 +653,43 @@ async fn check_oauth_auth(
                 StatusCode::UNAUTHORIZED,
                 HeaderMap::new(),
                 json!({"error": format!("token validation failed: {e}")}),
+            ))
+        }
+    }
+}
+
+/// Check Basic Auth for a request. Returns Err with HTTP response tuple if auth fails.
+fn check_basic_auth(
+    mount: &crate::mount::types::MountRecord,
+    headers: &HeaderMap,
+) -> Result<(), (StatusCode, HeaderMap, Value)> {
+    let creds = match &mount.basic_credentials {
+        Some(c) => c,
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                HeaderMap::new(),
+                json!({"error": "Basic Auth configured but no credentials on mount"}),
+            ));
+        }
+    };
+
+    let auth_header = headers.get("authorization")
+        .and_then(|v| v.to_str().ok());
+
+    match crate::auth::basic::validate_basic_auth(auth_header, creds) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            warn!(slug = %mount.slug, error = %e, "Basic Auth failed");
+            let mut resp_headers = HeaderMap::new();
+            resp_headers.insert(
+                "www-authenticate",
+                "Basic realm=\"mcptunnel\"".parse().unwrap(),
+            );
+            Err((
+                StatusCode::UNAUTHORIZED,
+                resp_headers,
+                json!({"error": format!("authentication failed: {e}")}),
             ))
         }
     }

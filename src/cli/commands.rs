@@ -69,7 +69,7 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
     let (program, cmd_args) = args.command.split_first().unwrap();
     let is_json = args.json;
     let is_managed = args.tunnel.as_deref() == Some("managed");
-    let is_oauth = args.auth.as_deref() == Some("oauth");
+    let is_public = args.auth.as_deref() == Some("public");
 
     // Parse env vars
     let env_vars: Vec<(String, String)> = args.env.iter()
@@ -102,8 +102,8 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
                 println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
             } else {
                 let mut warnings = Vec::new();
-                if !is_oauth {
-                    warnings.push("This endpoint is publicly reachable.".to_string());
+                if is_public {
+                    warnings.push("No authentication. This endpoint is publicly reachable.".to_string());
                 }
                 if !is_managed {
                     warnings.push("Quick Tunnel is for testing/development only.".to_string());

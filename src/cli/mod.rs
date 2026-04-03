@@ -107,7 +107,7 @@ pub struct RunArgs {
     pub hostname: Option<String>,
 
     /// Auth mode.
-    #[arg(long, value_parser = ["public", "inherit", "oauth"])]
+    #[arg(long, value_parser = ["public", "basic", "inherit", "oauth"])]
     pub auth: Option<String>,
 
     /// Default scopes for OAuth mode.

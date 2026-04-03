@@ -53,6 +53,7 @@ pub enum TunnelMode {
 #[serde(rename_all = "lowercase")]
 pub enum AuthModeConfig {
     Public,
+    Basic,
     Inherit,
     OAuth,
 }
@@ -97,7 +98,7 @@ impl Default for TunnelConfig {
 impl Default for DefaultsConfig {
     fn default() -> Self {
         Self {
-            auth_mode: AuthModeConfig::Public,
+            auth_mode: AuthModeConfig::Basic,
             probe_mode: ProbeMode::Eager,
             session_idle_ttl: Duration::from_secs(15 * 60),
             session_hard_ttl: Duration::from_secs(12 * 60 * 60),
@@ -117,7 +118,7 @@ impl Default for TunnelMode {
 
 impl Default for AuthModeConfig {
     fn default() -> Self {
-        Self::Public
+        Self::Basic
     }
 }
 
@@ -140,6 +141,7 @@ impl std::fmt::Display for AuthModeConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public => write!(f, "public"),
+            Self::Basic => write!(f, "basic"),
             Self::Inherit => write!(f, "inherit"),
             Self::OAuth => write!(f, "oauth"),
         }
@@ -250,7 +252,7 @@ mod tests {
         assert_eq!(config.daemon.bind, "127.0.0.1:43123");
         assert!(config.daemon.auto_start);
         assert_eq!(config.tunnel.default_mode, TunnelMode::Quick);
-        assert_eq!(config.defaults.auth_mode, AuthModeConfig::Public);
+        assert_eq!(config.defaults.auth_mode, AuthModeConfig::Basic);
         assert_eq!(config.defaults.session_idle_ttl, Duration::from_secs(900));
         assert_eq!(config.defaults.session_hard_ttl, Duration::from_secs(43200));
         assert_eq!(config.defaults.max_sessions_per_mount, 8);

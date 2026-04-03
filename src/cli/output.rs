@@ -36,7 +36,11 @@ pub fn print_mount_inspect(data: &Value) {
     println!("  Auth mode:      {}", data["auth_mode"].as_str().unwrap_or("?"));
     println!("  Tunnel mode:    {}", data["tunnel_mode"].as_str().unwrap_or("?"));
     println!("  Command:        {}", data["command"].as_str().unwrap_or("?"));
-    println!("  Public URL:     {}", data["public_url"].as_str().unwrap_or("?"));
+    if let Some(creds_url) = data["credentials_url"].as_str() {
+        println!("  MCP URL:        {}", creds_url);
+    } else {
+        println!("  Public URL:     {}", data["public_url"].as_str().unwrap_or("?"));
+    }
     println!("  Sessions:       {}", data["active_sessions"].as_u64().unwrap_or(0));
     println!("  Created:        {}", data["created_at"].as_str().unwrap_or("?"));
 
@@ -99,8 +103,15 @@ pub fn print_mount_created(data: &Value, warnings: &[String]) {
         println!("Mount created: {}", mount["slug"].as_str().unwrap_or("?"));
         println!("Tunnel mode: {}", mount["tunnel_mode"].as_str().unwrap_or("?"));
         println!("Auth mode: {}", mount["auth_mode"].as_str().unwrap_or("?"));
-        println!("Public MCP URL:");
-        println!("{}", mount["public_url"].as_str().unwrap_or("?"));
+
+        // Show credentials URL if Basic Auth, otherwise plain URL
+        if let Some(creds_url) = mount["credentials_url"].as_str() {
+            println!("MCP URL (with credentials):");
+            println!("{}", creds_url);
+        } else {
+            println!("Public MCP URL:");
+            println!("{}", mount["public_url"].as_str().unwrap_or("?"));
+        }
     }
 
     if !warnings.is_empty() {

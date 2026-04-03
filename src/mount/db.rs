@@ -1,6 +1,7 @@
 use rusqlite::{params, Connection, Result as SqlResult};
 
 use super::types::{MountRecord, MountStatus};
+use crate::auth::basic::BasicAuthCredentials;
 use crate::config::AuthModeConfig;
 
 /// Initialize the database schema.
@@ -59,14 +60,25 @@ pub fn init_db(conn: &Connection) -> SqlResult<()> {
         CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
         ",
     )?;
+
+    // Migration: add basic_credentials_json column if missing
+    let has_basic_creds: bool = conn
+        .prepare("SELECT basic_credentials_json FROM mounts LIMIT 0")
+        .is_ok();
+    if !has_basic_creds {
+        conn.execute_batch(
+            "ALTER TABLE mounts ADD COLUMN basic_credentials_json TEXT;"
+        )?;
+    }
+
     Ok(())
 }
 
 /// Insert a mount record.
 pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
     conn.execute(
-        "INSERT INTO mounts (id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        "INSERT INTO mounts (id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         params![
             record.id.to_string(),
             record.slug,
@@ -84,6 +96,7 @@ pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
             record.last_probe_at.map(|t| t.to_rfc3339()),
             record.last_probe_result.as_ref().map(|p| serde_json::to_string(p).unwrap_or_default()),
             serde_json::to_string(&record.env_vars).unwrap_or_default(),
+            record.basic_credentials.as_ref().map(|c| serde_json::to_string(c).unwrap_or_default()),
         ],
     )?;
     Ok(())
@@ -92,7 +105,7 @@ pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
 /// List all mounts.
 pub fn list_mounts(conn: &Connection) -> SqlResult<Vec<MountRecord>> {
     let mut stmt = conn.prepare(
-        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json FROM mounts"
+        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json FROM mounts"
     )?;
 
     let records = stmt.query_map([], |row| {
@@ -105,7 +118,7 @@ pub fn list_mounts(conn: &Connection) -> SqlResult<Vec<MountRecord>> {
 /// Get a mount by slug.
 pub fn get_mount_by_slug(conn: &Connection, slug: &str) -> SqlResult<Option<MountRecord>> {
     let mut stmt = conn.prepare(
-        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json FROM mounts WHERE slug = ?1"
+        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json FROM mounts WHERE slug = ?1"
     )?;
 
     let mut rows = stmt.query_map(params![slug], |row| Ok(row_to_mount(row)))?;
@@ -163,6 +176,7 @@ fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
     let policy_json: String = row.get(7).unwrap_or_else(|_| "{}".to_string());
     let probe_json: Option<String> = row.get(14).ok().unwrap_or(None);
     let env_json: String = row.get(15).unwrap_or_else(|_| "[]".to_string());
+    let basic_creds_json: Option<String> = row.get(16).ok().unwrap_or(None);
 
     let auth_mode_str: String = row.get(5).unwrap_or_else(|_| "public".to_string());
     let tunnel_mode_str: String = row.get(8).unwrap_or_else(|_| "quick".to_string());
@@ -181,10 +195,12 @@ fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
         }),
         cwd: row.get(4).ok().unwrap_or(None),
         auth_mode: match auth_mode_str.as_str() {
+            "basic" => AuthModeConfig::Basic,
             "inherit" => AuthModeConfig::Inherit,
             "oauth" => AuthModeConfig::OAuth,
             _ => AuthModeConfig::Public,
         },
+        basic_credentials: basic_creds_json.and_then(|j| serde_json::from_str::<BasicAuthCredentials>(&j).ok()),
         oauth_config: oauth_json.and_then(|j| serde_json::from_str(&j).ok()),
         policy: serde_json::from_str(&policy_json).unwrap_or_default(),
         tunnel_mode: match tunnel_mode_str.as_str() {
@@ -237,6 +253,7 @@ mod tests {
             },
             cwd: None,
             auth_mode: AuthModeConfig::Public,
+            basic_credentials: None,
             oauth_config: None,
             policy: PolicyConfig::default(),
             tunnel_mode: crate::config::TunnelMode::Quick,
@@ -288,5 +305,34 @@ mod tests {
         update_mount_status(&conn, "status-test", MountStatus::Stopped).unwrap();
         let fetched = get_mount_by_slug(&conn, "status-test").unwrap().unwrap();
         assert_eq!(fetched.status, MountStatus::Stopped);
+    }
+
+    #[test]
+    fn test_basic_credentials_roundtrip() {
+        let conn = test_db();
+        let mut record = make_record("basic-auth-test");
+        record.auth_mode = AuthModeConfig::Basic;
+        record.basic_credentials = Some(BasicAuthCredentials {
+            username: "mct".to_string(),
+            password: "abcdef0123456789".to_string(),
+        });
+        insert_mount(&conn, &record).unwrap();
+
+        let fetched = get_mount_by_slug(&conn, "basic-auth-test").unwrap().unwrap();
+        assert_eq!(fetched.auth_mode, AuthModeConfig::Basic);
+        let creds = fetched.basic_credentials.unwrap();
+        assert_eq!(creds.username, "mct");
+        assert_eq!(creds.password, "abcdef0123456789");
+    }
+
+    #[test]
+    fn test_no_credentials_for_public() {
+        let conn = test_db();
+        let record = make_record("public-test");
+        insert_mount(&conn, &record).unwrap();
+
+        let fetched = get_mount_by_slug(&conn, "public-test").unwrap().unwrap();
+        assert_eq!(fetched.auth_mode, AuthModeConfig::Public);
+        assert!(fetched.basic_credentials.is_none());
     }
 }
