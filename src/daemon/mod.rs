@@ -159,7 +159,18 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
     info!(bind = %bind_addr, "HTTP gateway listening");
 
-    axum::serve(listener, router).await?;
+    // Run HTTP server until shutdown signal
+    let shutdown_state = state.clone();
+    axum::serve(listener, router)
+        .with_graceful_shutdown(async move {
+            shutdown_state.shutdown.notified().await;
+            info!("Shutdown signal received, stopping daemon...");
+        })
+        .await?;
+
+    // Clean up socket file
+    let _ = std::fs::remove_file(&socket_path);
+    info!("Daemon stopped.");
 
     Ok(())
 }

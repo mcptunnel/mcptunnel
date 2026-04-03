@@ -338,11 +338,12 @@ async fn handle_doctor(config: &Config, slug: Option<&str>, json: bool) -> i32 {
 }
 
 /// Handle `daemon` subcommands.
+/// Daemon commands never auto-start the daemon — explicit management only.
 async fn handle_daemon(config: &Config, command: DaemonCommand) -> i32 {
     match command {
         DaemonCommand::Status { json } => {
             let request = AdminRequest::DaemonStatus;
-            match send_admin_request(config, &request) {
+            match send_admin_request_no_autostart(config, &request) {
                 Ok(AdminResponse::Ok { data }) => {
                     if json {
                         println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
@@ -362,9 +363,55 @@ async fn handle_daemon(config: &Config, command: DaemonCommand) -> i32 {
             }
         }
         DaemonCommand::Stop { force: _ } => {
-            eprintln!("Stopping daemon...");
-            // In a full implementation, send a shutdown signal
-            exit_codes::SUCCESS
+            let request = AdminRequest::DaemonShutdown;
+            match send_admin_request_no_autostart(config, &request) {
+                Ok(AdminResponse::Ok { data }) => {
+                    let mounts = data["mounts_active"].as_u64().unwrap_or(0);
+                    println!("Daemon stopped ({mounts} mount(s) were active).");
+                    exit_codes::SUCCESS
+                }
+                Ok(AdminResponse::Error { message, code }) => {
+                    eprintln!("Error: {message}");
+                    code
+                }
+                Err(_) => {
+                    eprintln!("Daemon is not running.");
+                    exit_codes::DAEMON_UNAVAILABLE
+                }
+            }
+        }
+        DaemonCommand::Restart => {
+            // Stop the daemon if running
+            let request = AdminRequest::DaemonShutdown;
+            match send_admin_request_no_autostart(config, &request) {
+                Ok(AdminResponse::Ok { .. }) => {
+                    println!("Daemon stopped.");
+                    // Wait for socket to be cleaned up
+                    let socket_path = crate::config::socket_path();
+                    for _ in 0..30 {
+                        if !socket_path.exists() {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+                Err(_) => {
+                    println!("Daemon was not running.");
+                }
+                _ => {}
+            }
+
+            // Start new daemon in background
+            match auto_start_daemon() {
+                Ok(()) => {
+                    println!("Daemon restarted.");
+                    exit_codes::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("Failed to restart daemon: {e}");
+                    exit_codes::INTERNAL_GATEWAY_ERROR
+                }
+            }
         }
         DaemonCommand::Start => {
             println!("Starting daemon...");
@@ -431,15 +478,22 @@ async fn handle_gc(_config: &Config) -> i32 {
 /// Send an admin request to the daemon via Unix domain socket.
 /// If the daemon is not running and auto_start is enabled, start it first.
 fn send_admin_request(config: &Config, request: &AdminRequest) -> Result<AdminResponse, String> {
+    send_admin_request_inner(request, config.daemon.auto_start)
+}
+
+/// Send an admin request without auto-starting the daemon.
+fn send_admin_request_no_autostart(_config: &Config, request: &AdminRequest) -> Result<AdminResponse, String> {
+    send_admin_request_inner(request, false)
+}
+
+fn send_admin_request_inner(request: &AdminRequest, auto_start: bool) -> Result<AdminResponse, String> {
     let socket_path = crate::config::socket_path();
 
-    // Try to connect; if it fails and auto_start is enabled, start the daemon
     match UnixStream::connect(&socket_path) {
         Ok(stream) => send_on_stream(stream, request),
-        Err(_) if config.daemon.auto_start => {
+        Err(_) if auto_start => {
             eprintln!("Daemon not running. Auto-starting...");
             auto_start_daemon()?;
-            // Retry connection after startup
             let stream = UnixStream::connect(&socket_path)
                 .map_err(|e| format!("Cannot connect to daemon after auto-start: {e}"))?;
             send_on_stream(stream, request)

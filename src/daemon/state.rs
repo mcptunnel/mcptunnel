@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 
 use crate::auth::oauth::JwksCache;
 use crate::config::Config;
@@ -25,6 +25,8 @@ pub struct AppState {
     pub mount_logs: RwLock<HashMap<String, Vec<String>>>,
     /// SSE senders per session ID — for forwarding server notifications to SSE clients.
     pub sse_senders: RwLock<HashMap<String, SseSender>>,
+    /// Shutdown signal.
+    pub shutdown: Notify,
 }
 
 impl AppState {
@@ -43,6 +45,7 @@ impl AppState {
             jwks_cache: Arc::new(JwksCache::new()),
             mount_logs: RwLock::new(HashMap::new()),
             sse_senders: RwLock::new(HashMap::new()),
+            shutdown: Notify::new(),
         }
     }
 

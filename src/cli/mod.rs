@@ -163,6 +163,8 @@ pub enum DaemonCommand {
     },
     /// Start the daemon in the foreground.
     Start,
+    /// Restart the daemon (stop + start in background).
+    Restart,
 }
 
 #[derive(Subcommand, Debug)]

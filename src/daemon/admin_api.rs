@@ -15,6 +15,7 @@ pub enum AdminRequest {
     MountInspect { slug: String },
     MountLogsTail { slug: String, lines: Option<usize> },
     DaemonStatus,
+    DaemonShutdown,
     TunnelStatus,
     DoctorRun { slug: Option<String> },
 }
@@ -60,6 +61,7 @@ pub async fn handle_admin_request(
         AdminRequest::MountInspect { slug } => handle_mount_inspect(state, &slug).await,
         AdminRequest::MountLogsTail { slug, lines } => handle_mount_logs(state, &slug, lines.unwrap_or(50)).await,
         AdminRequest::DaemonStatus => handle_daemon_status(state).await,
+        AdminRequest::DaemonShutdown => handle_daemon_shutdown(state).await,
         AdminRequest::TunnelStatus => handle_tunnel_status(state).await,
         AdminRequest::DoctorRun { slug } => handle_doctor_run(state, slug.as_deref()).await,
     }
@@ -279,6 +281,21 @@ async fn handle_mount_logs(state: &Arc<AppState>, slug: &str, lines: usize) -> A
             "slug": slug,
             "lines": log_lines,
             "count": log_lines.len(),
+        }),
+    }
+}
+
+async fn handle_daemon_shutdown(state: &Arc<AppState>) -> AdminResponse {
+    let mounts = state.mount_registry.list().unwrap_or_default();
+    let mount_count = mounts.len();
+
+    // Notify the daemon to shut down (the response is sent before exit)
+    state.shutdown.notify_one();
+
+    AdminResponse::Ok {
+        data: serde_json::json!({
+            "shutdown": true,
+            "mounts_active": mount_count,
         }),
     }
 }
