@@ -20,9 +20,16 @@ impl QuickTunnel {
 
     /// Start the quick tunnel.
     pub async fn start(&mut self) -> Result<String, crate::error::McpTunnelError> {
+        // Stop previous tunnel if any
+        self.stop().await;
+
         let url = format!("http://{}", self.local_bind);
+        // Use --config /dev/null to ignore ~/.cloudflared/config.yml which
+        // can interfere with quick tunnels (e.g. catch-all 404 ingress rules).
         let args = vec![
             "tunnel".to_string(),
+            "--config".to_string(),
+            "/dev/null".to_string(),
             "--url".to_string(),
             url,
         ];

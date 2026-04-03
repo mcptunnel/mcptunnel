@@ -114,19 +114,23 @@ impl Drop for CloudflaredSupervisor {
 
 /// Parse a tunnel URL from cloudflared output.
 fn parse_tunnel_url(line: &str) -> Option<String> {
-    // Look for HTTPS URLs — only accept trycloudflare.com or non-cloudflare custom domains.
-    // Exclude cloudflare documentation/marketing URLs.
+    // Look for trycloudflare.com URLs specifically — these are quick tunnel URLs.
+    // Also accept non-cloudflare custom domain URLs for managed tunnels.
     for word in line.split_whitespace() {
-        if word.starts_with("https://") && word.contains('.') {
-            // Clean trailing punctuation
-            let clean = word.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '/');
-            // Skip cloudflare documentation and marketing URLs
-            if clean.contains("developers.cloudflare.com")
-                || clean.contains("cloudflare.com/cloudflare-one")
-                || clean.contains("dash.cloudflare.com")
-            {
-                continue;
-            }
+        if !word.starts_with("https://") {
+            continue;
+        }
+        // Clean trailing punctuation and box-drawing characters
+        let clean = word.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '/');
+        let clean = clean.trim_end_matches('/');
+
+        // Accept trycloudflare.com URLs (quick tunnels)
+        if clean.contains(".trycloudflare.com") {
+            return Some(clean.to_string());
+        }
+
+        // Accept non-cloudflare domains (managed tunnels with custom hostnames)
+        if !clean.contains("cloudflare.com") {
             return Some(clean.to_string());
         }
     }
@@ -139,17 +143,29 @@ mod tests {
 
     #[test]
     fn test_parse_tunnel_url() {
+        // Standard quick tunnel URL in box
         assert_eq!(
-            parse_tunnel_url("INF |  https://bold-leaf-42.trycloudflare.com"),
-            Some("https://bold-leaf-42.trycloudflare.com".to_string())
+            parse_tunnel_url("2026-04-03T20:31:28Z INF |  https://grass-engagement-ride-medical.trycloudflare.com                                   |"),
+            Some("https://grass-engagement-ride-medical.trycloudflare.com".to_string())
         );
+        // No URL line
         assert_eq!(
             parse_tunnel_url("2026-04-02T12:00:00Z INF +-----------------------------------------------------------+"),
             None
         );
+        // URL in prose
         assert_eq!(
             parse_tunnel_url("Your quick Tunnel has been created! Visit it at (it may take some time to be reachable): https://test-abc-123.trycloudflare.com"),
             Some("https://test-abc-123.trycloudflare.com".to_string())
+        );
+        // Must NOT match cloudflare docs/marketing URLs
+        assert_eq!(
+            parse_tunnel_url("following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps"),
+            None
+        );
+        assert_eq!(
+            parse_tunnel_url("Terms of Use (https://www.cloudflare.com/website-terms/)"),
+            None
         );
     }
 }
