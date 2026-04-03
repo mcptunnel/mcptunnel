@@ -70,14 +70,6 @@ impl SessionManager {
         }
     }
 
-    /// Set the upstream PID for a session.
-    pub async fn set_upstream_pid(&self, session_id: &str, pid: u32) {
-        let mut sessions = self.sessions.write().await;
-        if let Some(session) = sessions.get_mut(session_id) {
-            session.upstream_pid = Some(pid);
-        }
-    }
-
     /// Delete a session.
     pub async fn delete_session(&self, session_id: &str) -> Option<Session> {
         let mut sessions = self.sessions.write().await;
@@ -96,16 +88,6 @@ impl SessionManager {
             .values()
             .filter(|s| s.mount_slug == mount_slug && s.status == SessionStatus::Active)
             .count()
-    }
-
-    /// List all sessions for a mount.
-    pub async fn list_sessions(&self, mount_slug: &str) -> Vec<Session> {
-        let sessions = self.sessions.read().await;
-        sessions
-            .values()
-            .filter(|s| s.mount_slug == mount_slug)
-            .cloned()
-            .collect()
     }
 
     /// Evict idle sessions (past idle TTL or hard TTL).

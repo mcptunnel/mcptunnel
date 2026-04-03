@@ -206,7 +206,7 @@ fn build_downstream_capabilities(mount: &crate::mount::types::MountRecord) -> Va
 /// Handle tools/list — filter by policy + overlay auth metadata.
 async fn handle_tools_list(
     state: &Arc<AppState>,
-    slug: &str,
+    _slug: &str,
     mount: &crate::mount::types::MountRecord,
     headers: &HeaderMap,
     id: Option<Value>,
@@ -286,8 +286,8 @@ async fn handle_tools_call(
 
 /// Handle resources/list — filter by policy.
 async fn handle_resources_list(
-    state: &Arc<AppState>,
-    slug: &str,
+    _state: &Arc<AppState>,
+    _slug: &str,
     mount: &crate::mount::types::MountRecord,
     id: Option<Value>,
 ) -> Value {
@@ -308,8 +308,8 @@ async fn handle_resources_list(
 /// Handle resources/read — check policy + forward.
 async fn handle_resources_read(
     state: &Arc<AppState>,
-    slug: &str,
-    mount: &crate::mount::types::MountRecord,
+    _slug: &str,
+    _mount: &crate::mount::types::MountRecord,
     headers: &HeaderMap,
     id: Option<Value>,
     params: Option<Value>,
@@ -334,8 +334,8 @@ async fn handle_resources_read(
 
 /// Handle prompts/list — filter by policy.
 async fn handle_prompts_list(
-    state: &Arc<AppState>,
-    slug: &str,
+    _state: &Arc<AppState>,
+    _slug: &str,
     mount: &crate::mount::types::MountRecord,
     id: Option<Value>,
 ) -> Value {
@@ -355,8 +355,8 @@ async fn handle_prompts_list(
 /// Handle prompts/get — forward to upstream.
 async fn handle_prompts_get(
     state: &Arc<AppState>,
-    slug: &str,
-    mount: &crate::mount::types::MountRecord,
+    _slug: &str,
+    _mount: &crate::mount::types::MountRecord,
     headers: &HeaderMap,
     id: Option<Value>,
     params: Option<Value>,
@@ -387,7 +387,6 @@ pub async fn handle_get_mcp(
 ) -> axum::response::Response {
     use axum::body::Body;
     use axum::response::IntoResponse;
-    use futures::stream::StreamExt;
     use tokio_stream::wrappers::ReceiverStream;
 
     let mount = match state.mount_registry.get(&slug) {
@@ -606,7 +605,7 @@ async fn check_oauth_auth(
                 warn!(slug = %mount.slug, "OAuth: insufficient scope");
                 let tunnel_origin = state.tunnel_origin.read().await.clone()
                     .unwrap_or_else(|| "https://localhost".to_string());
-                let resource_metadata_url = format!(
+                let _resource_metadata_url = format!(
                     "{}/{}/.well-known/oauth-protected-resource",
                     tunnel_origin, mount.slug
                 );

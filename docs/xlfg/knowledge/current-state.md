@@ -29,7 +29,7 @@ src/
 - tokio-stream — SSE streaming
 
 ## Test Coverage
-36 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers, logging utilities, tunnel URL parsing, JWKS cache.
+34 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers, logging utilities, tunnel URL parsing, JWKS cache.
 
 ## Feature Completeness
 - CLI: all 9 subcommands implemented (run, list, inspect, logs, stop, doctor, daemon, tunnel, gc)

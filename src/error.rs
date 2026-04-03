@@ -21,6 +21,7 @@ pub enum McpTunnelError {
     #[error("CLI usage error: {0}")]
     CliUsage(String),
 
+    #[allow(dead_code)]
     #[error("Daemon unavailable: {0}")]
     DaemonUnavailable(String),
 
@@ -33,18 +34,23 @@ pub enum McpTunnelError {
     #[error("Upstream command spawn failed: {0}")]
     UpstreamSpawnFailed(String),
 
+    #[allow(dead_code)]
     #[error("Upstream probe failed: {0}")]
     UpstreamProbeFailed(String),
 
+    #[allow(dead_code)]
     #[error("Mount not found: {0}")]
     MountNotFound(String),
 
+    #[allow(dead_code)]
     #[error("Mount policy violation: {0}")]
     MountPolicyViolation(String),
 
+    #[allow(dead_code)]
     #[error("OAuth configuration invalid: {0}")]
     OAuthConfigInvalid(String),
 
+    #[allow(dead_code)]
     #[error("Token verification failed: {0}")]
     TokenVerificationFailed(String),
 

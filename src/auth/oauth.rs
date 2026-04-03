@@ -1,8 +1,6 @@
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Deserialize;
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
@@ -129,7 +127,9 @@ struct JwkKey {
     n: Option<String>,
     e: Option<String>,
     #[serde(rename = "use")]
+    #[allow(dead_code)]
     use_: Option<String>,
+    #[allow(dead_code)]
     alg: Option<String>,
 }
 
@@ -251,35 +251,10 @@ pub fn build_www_authenticate(resource_metadata_url: &str, scopes: &[String]) ->
     )
 }
 
-/// Build a tool-level auth challenge error result for MCP.
-pub fn build_tool_auth_challenge(
-    request_id: serde_json::Value,
-    resource_metadata_url: &str,
-    error_description: &str,
-) -> serde_json::Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": request_id,
-        "result": {
-            "content": [{
-                "type": "text",
-                "text": "Authentication required."
-            }],
-            "_meta": {
-                "mcp/www_authenticate": [
-                    format!("Bearer resource_metadata=\"{resource_metadata_url}\", error=\"insufficient_scope\", error_description=\"{error_description}\"")
-                ]
-            },
-            "isError": true
-        }
-    })
-}
-
 #[derive(Debug)]
 pub enum TokenValidationError {
     MissingToken,
     InvalidToken(String),
-    InsufficientScope,
 }
 
 impl std::fmt::Display for TokenValidationError {
@@ -287,18 +262,19 @@ impl std::fmt::Display for TokenValidationError {
         match self {
             Self::MissingToken => write!(f, "missing bearer token"),
             Self::InvalidToken(e) => write!(f, "invalid token: {e}"),
-            Self::InsufficientScope => write!(f, "insufficient scope"),
         }
     }
 }
 
 /// JWT claims structure.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 struct Claims {
     sub: Option<String>,
     iss: Option<String>,
+    #[allow(dead_code)]
     aud: Option<serde_json::Value>,
     exp: Option<u64>,
+    #[allow(dead_code)]
     nbf: Option<u64>,
     scope: Option<String>,
 }
@@ -353,17 +329,6 @@ mod tests {
         assert!(header.contains("Bearer"));
         assert!(header.contains("resource_metadata="));
         assert!(header.contains("painter.use"));
-    }
-
-    #[test]
-    fn test_build_tool_auth_challenge() {
-        let result = build_tool_auth_challenge(
-            json!(4),
-            "https://mcp.example.com/painter/.well-known/oauth-protected-resource",
-            "Login required",
-        );
-        assert_eq!(result["result"]["isError"], true);
-        assert!(result["result"]["_meta"]["mcp/www_authenticate"].is_array());
     }
 
     #[tokio::test]

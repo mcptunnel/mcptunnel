@@ -221,16 +221,6 @@ pub fn socket_path() -> PathBuf {
     state_dir().join("daemon.sock")
 }
 
-/// PID directory: `~/.local/state/mcptunnel/pids/`
-pub fn pids_dir() -> PathBuf {
-    state_dir().join("pids")
-}
-
-/// Logs directory: `~/.local/state/mcptunnel/logs/`
-pub fn logs_dir() -> PathBuf {
-    state_dir().join("logs")
-}
-
 /// Load config from file, falling back to defaults.
 pub fn load_config() -> Config {
     let path = config_path();

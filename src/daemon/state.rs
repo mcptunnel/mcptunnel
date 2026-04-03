@@ -94,6 +94,7 @@ impl AppState {
     }
 
     /// Send an SSE event to a session's connected client.
+    #[allow(dead_code)]
     pub async fn send_sse_event(&self, session_id: &str, event: &str, data: &str) -> bool {
         let senders = self.sse_senders.read().await;
         if let Some(sender) = senders.get(session_id) {

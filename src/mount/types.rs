@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::config::{AuthModeConfig, ProbeMode, TunnelMode};
+use crate::config::{AuthModeConfig, TunnelMode};
 use crate::policy::types::PolicyConfig;
 
 /// A mount record representing a registered MCP server endpoint.
@@ -90,27 +90,5 @@ pub struct MountCreateParams {
     pub auth_mode: AuthModeConfig,
     pub oauth_config: Option<OAuthMountConfig>,
     pub policy: PolicyConfig,
-    pub probe_mode: ProbeMode,
     pub env_vars: Vec<(String, String)>,
-}
-
-/// Summary for list output.
-#[derive(Debug, Clone, Serialize)]
-pub struct MountSummary {
-    pub slug: String,
-    pub status: MountStatus,
-    pub tunnel: TunnelMode,
-    pub auth: AuthModeConfig,
-    pub sessions: usize,
-    pub tools: usize,
-    pub url: String,
-}
-
-/// Detailed inspect output.
-#[derive(Debug, Clone, Serialize)]
-pub struct MountInspect {
-    pub record: MountRecord,
-    pub active_sessions: usize,
-    pub public_url: String,
-    pub last_error: Option<String>,
 }

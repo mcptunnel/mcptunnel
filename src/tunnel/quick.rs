@@ -1,6 +1,6 @@
 use super::supervisor::CloudflaredSupervisor;
 use super::{TunnelState, TunnelStatus};
-use tracing::{error, info, warn};
+use tracing::info;
 
 /// Quick tunnel manager — spawns `cloudflared tunnel --url <local>`.
 pub struct QuickTunnel {
@@ -82,11 +82,6 @@ impl QuickTunnel {
                 error: None,
             }
         }
-    }
-
-    /// Get the public origin URL.
-    pub fn public_origin(&self) -> Option<String> {
-        self.supervisor.as_ref().and_then(|s| s.public_origin())
     }
 
     /// Stop the tunnel.

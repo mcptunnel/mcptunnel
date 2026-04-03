@@ -2,7 +2,7 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::watch;
-use tracing::{error, info, warn};
+use tracing::info;
 
 /// Supervise a cloudflared process, parsing its output for the public URL.
 pub struct CloudflaredSupervisor {

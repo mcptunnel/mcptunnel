@@ -1,5 +1,4 @@
 pub mod quick;
-pub mod managed;
 pub mod supervisor;
 
 use serde::{Deserialize, Serialize};

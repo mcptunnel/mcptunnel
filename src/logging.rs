@@ -14,27 +14,6 @@ pub fn init_logging(level: &str) {
         .init();
 }
 
-/// Initialize human-readable logging for CLI commands.
-pub fn init_cli_logging() {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("warn"));
-
-    fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .with_thread_ids(false)
-        .init();
-}
-
-/// Redact sensitive values in log output.
-pub fn redact_secret(value: &str) -> String {
-    if value.len() <= 8 {
-        "***REDACTED***".to_string()
-    } else {
-        format!("{}...***REDACTED***", &value[..4])
-    }
-}
-
 /// Compute a truncated SHA-256 hash of a session ID for logging.
 pub fn hash_session_id(session_id: &str) -> String {
     use sha2::{Digest, Sha256};
@@ -45,12 +24,6 @@ pub fn hash_session_id(session_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_redact_secret() {
-        assert_eq!(redact_secret("short"), "***REDACTED***");
-        assert_eq!(redact_secret("Bearer eyJhbGciOi..."), "Bear...***REDACTED***");
-    }
 
     #[test]
     fn test_hash_session_id() {

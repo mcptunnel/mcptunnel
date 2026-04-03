@@ -40,6 +40,7 @@ pub struct SessionConfig {
     pub idle_ttl: Duration,
     pub hard_ttl: Duration,
     pub max_sessions_per_mount: usize,
+    #[allow(dead_code)]
     pub max_inflight_per_session: usize,
 }
 

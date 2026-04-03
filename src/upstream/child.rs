@@ -1,14 +1,13 @@
 use crate::mount::types::CommandConfig;
-use rmcp::model::{CallToolRequestParams, CallToolResult};
+use rmcp::model::CallToolRequestParams;
 use rmcp::service::{RunningService, RoleClient, ServiceExt, Peer};
 use rmcp::transport::TokioChildProcess;
 use tokio::process::Command;
-use tracing::{error, info};
+use tracing::info;
 
 /// A running upstream MCP child process session.
 pub struct UpstreamChild {
     client: RunningService<RoleClient, ()>,
-    pid: Option<u32>,
 }
 
 impl UpstreamChild {
@@ -30,8 +29,6 @@ impl UpstreamChild {
         let transport = TokioChildProcess::new(cmd)
             .map_err(|e| crate::error::McpTunnelError::UpstreamSpawnFailed(e.to_string()))?;
 
-        let pid = None; // PID is set by rmcp internally
-
         let client = ().serve(transport)
             .await
             .map_err(|e| crate::error::McpTunnelError::UpstreamSpawnFailed(
@@ -40,7 +37,7 @@ impl UpstreamChild {
 
         info!(program = %config.program, "Upstream child process initialized");
 
-        Ok(Self { client, pid })
+        Ok(Self { client })
     }
 
     /// Get the peer for making MCP requests.
@@ -117,11 +114,6 @@ impl UpstreamChild {
                 ))
             }
         }
-    }
-
-    /// Check if the child process is still running.
-    pub fn is_closed(&self) -> bool {
-        self.client.is_closed()
     }
 
     /// Shut down the child process gracefully.

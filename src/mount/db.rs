@@ -156,46 +156,6 @@ pub fn slug_exists(conn: &Connection, slug: &str) -> SqlResult<bool> {
     Ok(count > 0)
 }
 
-/// Save tunnel state.
-pub fn save_tunnel_state(
-    conn: &Connection,
-    instance_id: &str,
-    mode: &str,
-    public_origin: Option<&str>,
-    cloudflared_pid: Option<u32>,
-    status: &str,
-) -> SqlResult<()> {
-    conn.execute(
-        "INSERT OR REPLACE INTO tunnel_state (daemon_instance_id, mode, public_origin, cloudflared_pid, status, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![
-            instance_id,
-            mode,
-            public_origin,
-            cloudflared_pid,
-            status,
-            chrono::Utc::now().to_rfc3339(),
-        ],
-    )?;
-    Ok(())
-}
-
-/// Get tunnel state.
-pub fn get_tunnel_state(conn: &Connection) -> SqlResult<Option<(String, Option<String>, Option<u32>, String)>> {
-    let mut stmt = conn.prepare(
-        "SELECT mode, public_origin, cloudflared_pid, status FROM tunnel_state ORDER BY updated_at DESC LIMIT 1"
-    )?;
-    let mut rows = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, Option<String>>(1)?,
-            row.get::<_, Option<u32>>(2)?,
-            row.get::<_, String>(3)?,
-        ))
-    })?;
-    Ok(rows.next().and_then(|r| r.ok()))
-}
-
 fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
     let id_str: String = row.get(0).unwrap_or_default();
     let command_json: String = row.get(3).unwrap_or_default();

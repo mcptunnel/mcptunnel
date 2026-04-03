@@ -103,7 +103,6 @@ async fn handle_mount_create(
             expose_prompts: !req.hide_prompts,
             ..Default::default()
         },
-        probe_mode,
         env_vars: req.env_vars,
     };
 

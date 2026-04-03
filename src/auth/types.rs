@@ -1,27 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Auth mode for a mount.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AuthMode {
-    /// No auth enforcement; inject `noauth` where needed.
-    Public,
-    /// Preserve upstream auth metadata as-is.
-    Inherit,
-    /// Gateway-managed OAuth-compatible endpoint protection.
-    OAuth,
-}
-
-impl std::fmt::Display for AuthMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Public => write!(f, "public"),
-            Self::Inherit => write!(f, "inherit"),
-            Self::OAuth => write!(f, "oauth"),
-        }
-    }
-}
-
 /// OAuth validation configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthConfig {
@@ -35,8 +13,10 @@ pub struct OAuthConfig {
 #[derive(Debug, Clone)]
 pub struct TokenClaims {
     pub subject: Option<String>,
+    #[allow(dead_code)]
     pub issuer: String,
     pub scopes: Vec<String>,
+    #[allow(dead_code)]
     pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
