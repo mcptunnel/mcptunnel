@@ -1,0 +1,5 @@
+# xlfg ephemeral state
+.xlfg/
+docs/xlfg/runs/*
+!docs/xlfg/runs/.gitkeep
+!docs/xlfg/runs/README.md
