@@ -1,8 +1,8 @@
 {
-  "build": null,
-  "test": null,
-  "lint": null,
-  "format": null,
-  "dev": null,
+  "build": "cargo build",
+  "test": "cargo test",
+  "lint": "cargo clippy",
+  "format": "cargo fmt",
+  "dev": "cargo run -- daemon start",
   "deploy": null
 }

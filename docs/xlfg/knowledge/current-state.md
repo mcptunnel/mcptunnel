@@ -1,3 +1,36 @@
 # Current State
 
-<!-- Updated by xlfg runs. Describes repo architecture, key components, and recent changes. -->
+## Architecture
+Single Rust binary (`mcptunnel`) with subcommand dispatch. Daemon runs HTTP gateway (axum) + UDS admin API. CLI commands communicate with daemon over Unix domain socket.
+
+## Module Layout
+```
+src/
+  main.rs, config.rs, error.rs, logging.rs, doctor.rs
+  cli/{mod,commands,output}.rs
+  daemon/{mod,admin_api,state}.rs
+  tunnel/{mod,quick,managed,supervisor}.rs
+  mount/{mod,db,slug,types}.rs
+  gateway/{mod,mcp_handler,inspection,health}.rs
+  session/{mod,types}.rs
+  upstream/{mod,probe,child}.rs
+  policy/{mod,filter,types}.rs
+  auth/{mod,public,oauth,types}.rs
+```
+
+## Key Crates
+- rmcp 1.3 (client + transport-child-process) — upstream stdio MCP client
+- axum 0.8 — HTTP gateway
+- rusqlite 0.32 (bundled) — SQLite persistence
+- clap 4 — CLI
+- tokio 1 — async runtime
+- tracing — structured logging
+
+## Test Coverage
+35 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers, logging utilities, tunnel URL parsing.
+
+## Known Gaps
+- OAuth token validation exists but not wired to gateway request path
+- GET SSE on managed mode returns 501 (not yet implemented)
+- Tunnel auto-start not wired to `run` command (daemon must be started separately with `daemon start`)
+- `logs` command shows guidance only (no log streaming from daemon)

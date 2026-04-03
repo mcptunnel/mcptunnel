@@ -3,3 +3,9 @@
 docs/xlfg/runs/*
 !docs/xlfg/runs/.gitkeep
 !docs/xlfg/runs/README.md
+
+# Spec file (do not commit)
+mcptunnel_full_spec.md
+
+# Build artifacts
+/target/

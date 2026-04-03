@@ -1,0 +1,74 @@
+use axum::extract::{Path, State};
+use axum::http::{StatusCode, header};
+use axum::response::IntoResponse;
+use std::sync::Arc;
+
+use crate::daemon::state::AppState;
+
+/// GET /<slug> — human-readable inspection page.
+pub async fn inspection_page(
+    State(state): State<Arc<AppState>>,
+    Path(slug): Path<String>,
+) -> impl IntoResponse {
+    let mount = match state.mount_registry.get(&slug) {
+        Ok(Some(m)) => m,
+        _ => {
+            return (StatusCode::NOT_FOUND, [(header::CONTENT_TYPE, "text/html")],
+                "<h1>404 — Mount not found</h1>".to_string());
+        }
+    };
+
+    let tunnel_origin = state.tunnel_origin.read().await.clone()
+        .unwrap_or_else(|| "unavailable".to_string());
+    let public_url = format!("{}/{}/mcp", tunnel_origin, slug);
+    let active_sessions = state.session_manager.active_count(&slug).await;
+
+    let probe_info = mount.last_probe_result.as_ref().map(|p| {
+        format!(
+            "<li><strong>Server:</strong> {} (v{})</li>\n<li><strong>Protocol:</strong> {}</li>\n<li><strong>Tools:</strong> {}</li>",
+            p.server_name.as_deref().unwrap_or("unknown"),
+            p.server_version.as_deref().unwrap_or("?"),
+            p.protocol_version.as_deref().unwrap_or("?"),
+            p.tools.join(", ")
+        )
+    }).unwrap_or_else(|| "<li>No probe data available</li>".to_string());
+
+    let html = format!(
+        r#"<!DOCTYPE html>
+<html>
+<head><title>mcptunnel — {slug}</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }}
+  h1 {{ color: #333; }}
+  .url {{ background: #f0f0f0; padding: 12px; border-radius: 4px; font-family: monospace; word-break: break-all; }}
+  .warn {{ background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin: 16px 0; }}
+  ul {{ list-style: none; padding: 0; }}
+  li {{ padding: 4px 0; }}
+</style>
+</head>
+<body>
+<h1>mcptunnel — {slug}</h1>
+<p class="url">{public_url}</p>
+<ul>
+  <li><strong>Display name:</strong> {display_name}</li>
+  <li><strong>Auth mode:</strong> {auth_mode}</li>
+  <li><strong>Tunnel mode:</strong> {tunnel_mode}</li>
+  <li><strong>Active sessions:</strong> {active_sessions}</li>
+  <li><strong>Status:</strong> {status}</li>
+  {probe_info}
+</ul>
+{warn_html}
+</body>
+</html>"#,
+        slug = mount.slug,
+        display_name = mount.display_name,
+        auth_mode = mount.auth_mode,
+        tunnel_mode = mount.tunnel_mode,
+        status = mount.status,
+        warn_html = if mount.auth_mode == crate::config::AuthModeConfig::Public {
+            "<div class=\"warn\"><strong>Warning:</strong> This endpoint is publicly reachable with no authentication.</div>"
+        } else { "" },
+    );
+
+    (StatusCode::OK, [(header::CONTENT_TYPE, "text/html")], html)
+}
