@@ -330,12 +330,30 @@ async fn handle_gc(_config: &Config) -> i32 {
 }
 
 /// Send an admin request to the daemon via Unix domain socket.
+/// If the daemon is not running and auto_start is enabled, start it first.
 fn send_admin_request(config: &Config, request: &AdminRequest) -> Result<AdminResponse, String> {
     let socket_path = crate::config::socket_path();
 
-    let mut stream = UnixStream::connect(&socket_path)
-        .map_err(|e| format!("Cannot connect to daemon at {}: {e}", socket_path.display()))?;
+    // Try to connect; if it fails and auto_start is enabled, start the daemon
+    match UnixStream::connect(&socket_path) {
+        Ok(stream) => send_on_stream(stream, request),
+        Err(_) if config.daemon.auto_start => {
+            eprintln!("Daemon not running. Auto-starting...");
+            auto_start_daemon()?;
+            // Retry connection after startup
+            let stream = UnixStream::connect(&socket_path)
+                .map_err(|e| format!("Cannot connect to daemon after auto-start: {e}"))?;
+            send_on_stream(stream, request)
+        }
+        Err(e) => Err(format!(
+            "Cannot connect to daemon at {}: {e}\nStart the daemon with: mcptunnel daemon start",
+            socket_path.display()
+        )),
+    }
+}
 
+/// Send a request on an already-connected Unix stream.
+fn send_on_stream(mut stream: UnixStream, request: &AdminRequest) -> Result<AdminResponse, String> {
     let request_json = serde_json::to_string(request)
         .map_err(|e| format!("Failed to serialize request: {e}"))?;
 
@@ -345,7 +363,6 @@ fn send_admin_request(config: &Config, request: &AdminRequest) -> Result<AdminRe
         .map_err(|e| format!("Failed to send newline: {e}"))?;
 
     let reader = std::io::BufReader::new(&stream);
-    let mut line = String::new();
     reader.lines().next()
         .ok_or_else(|| "No response from daemon".to_string())?
         .map_err(|e| format!("Failed to read response: {e}"))
@@ -353,4 +370,42 @@ fn send_admin_request(config: &Config, request: &AdminRequest) -> Result<AdminRe
             serde_json::from_str(&line)
                 .map_err(|e| format!("Failed to parse response: {e}"))
         })
+}
+
+/// Auto-start the daemon as a background process.
+fn auto_start_daemon() -> Result<(), String> {
+    use std::process::Command;
+
+    // Ensure state directory exists
+    let state_dir = crate::config::state_dir();
+    std::fs::create_dir_all(&state_dir)
+        .map_err(|e| format!("Failed to create state dir: {e}"))?;
+
+    // Get the current executable path
+    let exe = std::env::current_exe()
+        .map_err(|e| format!("Failed to get current executable: {e}"))?;
+
+    // Spawn daemon as a background process
+    let child = Command::new(&exe)
+        .args(["daemon", "start"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn daemon: {e}"))?;
+
+    eprintln!("Daemon started (PID: {}).", child.id());
+
+    // Wait for the socket to appear (up to 5 seconds)
+    let socket_path = crate::config::socket_path();
+    for _ in 0..50 {
+        if socket_path.exists() {
+            // Give it a moment to start accepting connections
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    Err("Daemon started but socket not available after 5 seconds".to_string())
 }

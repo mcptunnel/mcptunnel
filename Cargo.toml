@@ -62,6 +62,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Async utilities
 tokio-util = { version = "0.7", features = ["rt"] }
+tokio-stream = "0.1"
 futures = "0.3"
 
 # SHA-256 for session ID hashing in logs

@@ -30,7 +30,7 @@ src/
 35 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers, logging utilities, tunnel URL parsing.
 
 ## Known Gaps
-- OAuth token validation exists but not wired to gateway request path
-- GET SSE on managed mode returns 501 (not yet implemented)
-- Tunnel auto-start not wired to `run` command (daemon must be started separately with `daemon start`)
+- Full JWT signature validation requires JWKS fetching/caching (current OAuth gate checks token format only)
+- SSE stream sends keepalives; server-initiated notifications from upstream not yet forwarded
 - `logs` command shows guidance only (no log streaming from daemon)
+- Tunnel is not auto-started as part of daemon startup (must be started via future tunnel management)

@@ -32,6 +32,18 @@ pub async fn handle_post_mcp(
         }
     };
 
+    // OAuth enforcement — check bearer token before dispatching
+    if mount.auth_mode == AuthModeConfig::OAuth {
+        let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("");
+        // Allow initialize without auth (so the client can discover auth requirements)
+        // but require auth for all other methods
+        if method != "initialize" {
+            if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
+                return (challenge.0, challenge.1, Json(challenge.2));
+            }
+        }
+    }
+
     // Handle batch requests
     if let Some(batch) = body.as_array() {
         let mut results = Vec::new();
@@ -362,25 +374,79 @@ async fn handle_prompts_get(
 pub async fn handle_get_mcp(
     State(state): State<Arc<AppState>>,
     Path(slug): Path<String>,
-) -> (StatusCode, Json<Value>) {
+    headers: HeaderMap,
+) -> axum::response::Response {
+    use axum::body::Body;
+    use axum::response::IntoResponse;
+    use futures::stream::StreamExt;
+    use tokio_stream::wrappers::ReceiverStream;
+
     let mount = match state.mount_registry.get(&slug) {
         Ok(Some(m)) => m,
-        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "mount not found"}))),
+        _ => {
+            return (StatusCode::NOT_FOUND, Json(json!({"error": "mount not found"}))).into_response();
+        }
     };
 
     if mount.tunnel_mode == TunnelMode::Quick {
         return (
             StatusCode::METHOD_NOT_ALLOWED,
-            Json(json!({"error": "GET SSE not supported in quick mode"})),
-        );
+            Json(json!({"error": "GET SSE not supported in quick mode. Use --tunnel managed for SSE support."})),
+        ).into_response();
     }
 
-    // Managed mode: SSE would be implemented here
-    // For MVP, return 501 to indicate it's planned but not yet implemented
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({"error": "SSE streaming not yet implemented for managed mode"})),
-    )
+    // OAuth check for managed mode
+    if mount.auth_mode == AuthModeConfig::OAuth {
+        if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
+            return (challenge.0, Json(challenge.2)).into_response();
+        }
+    }
+
+    // Managed mode: establish SSE stream
+    let session_id = get_session_id(&headers);
+
+    // Validate session exists
+    if let Some(ref sid) = session_id {
+        if state.session_manager.get_session(sid).await.is_none() {
+            return (StatusCode::NOT_FOUND, Json(json!({"error": "session not found"}))).into_response();
+        }
+        state.session_manager.touch_session(sid).await;
+    }
+
+    // Create SSE stream channel
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<String, std::convert::Infallible>>(32);
+
+    // Send initial keepalive
+    let _ = tx.send(Ok(": keepalive\n\n".to_string())).await;
+
+    // Spawn a task that sends periodic keepalives and would forward
+    // server-initiated notifications from the upstream child
+    let keep_alive_tx = tx.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+        loop {
+            interval.tick().await;
+            if keep_alive_tx.send(Ok(": keepalive\n\n".to_string())).await.is_err() {
+                break; // Client disconnected
+            }
+        }
+    });
+
+    info!(slug = %slug, "SSE stream established");
+
+    // Build SSE response
+    let stream = ReceiverStream::new(rx);
+    let body = Body::from_stream(stream);
+
+    axum::response::Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "text/event-stream")
+        .header("cache-control", "no-cache")
+        .header("connection", "keep-alive")
+        .body(body)
+        .unwrap_or_else(|_| {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "failed to create SSE stream"}))).into_response()
+        })
 }
 
 /// DELETE /<slug>/mcp — terminate session.
@@ -454,6 +520,72 @@ pub async fn handle_oauth_metadata(
     );
 
     (StatusCode::OK, Json(serde_json::to_value(metadata).unwrap_or_default()))
+}
+
+/// Check OAuth auth for a request. Returns Err with HTTP response tuple if auth fails.
+async fn check_oauth_auth(
+    mount: &crate::mount::types::MountRecord,
+    headers: &HeaderMap,
+    state: &Arc<AppState>,
+) -> Result<(), (StatusCode, HeaderMap, Value)> {
+    let oauth_config = match &mount.oauth_config {
+        Some(c) => c,
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                HeaderMap::new(),
+                json!({"error": "OAuth configured but no OAuth config on mount"}),
+            ));
+        }
+    };
+
+    let auth_header = headers.get("authorization")
+        .and_then(|v| v.to_str().ok());
+
+    if auth_header.is_none() {
+        // No token — return 401 with WWW-Authenticate challenge
+        let tunnel_origin = state.tunnel_origin.read().await.clone()
+            .unwrap_or_else(|| "https://localhost".to_string());
+        let resource_metadata_url = format!(
+            "{}/{}/.well-known/oauth-protected-resource",
+            tunnel_origin, mount.slug
+        );
+        let challenge = crate::auth::oauth::build_www_authenticate(
+            &resource_metadata_url,
+            &oauth_config.default_scopes,
+        );
+
+        let mut resp_headers = HeaderMap::new();
+        if let Ok(val) = challenge.parse() {
+            resp_headers.insert("www-authenticate", val);
+        }
+
+        warn!(slug = %mount.slug, "OAuth: missing bearer token");
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            resp_headers,
+            json!({"error": "authentication required"}),
+        ));
+    }
+
+    // Token present — for full validation we would need the JWKS/DecodingKey.
+    // In the MVP, we validate the token format and log the attempt.
+    // Full JWKS fetching and caching is a follow-up enhancement.
+    let token = auth_header.unwrap();
+    if !token.starts_with("Bearer ") && !token.starts_with("bearer ") {
+        warn!(slug = %mount.slug, "OAuth: invalid authorization header format");
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            HeaderMap::new(),
+            json!({"error": "invalid authorization header, expected Bearer token"}),
+        ));
+    }
+
+    // Token format is valid — allow the request through.
+    // NOTE: Full JWT signature/claims validation requires JWKS fetching which
+    // is deferred to a follow-up. The auth enforcement gate is now active.
+    info!(slug = %mount.slug, "OAuth: bearer token accepted (format check)");
+    Ok(())
 }
 
 /// Extract MCP-Session-Id from headers.
