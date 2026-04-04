@@ -11,3 +11,4 @@
 - OAuth built-in vs external: `mount.oauth_config.builtin` flag determines mode. Built-in uses `state.oauth_server.signing_key.decoding_key` for validation; external uses JWKS cache.
 - HTML template safety: always use `html_escape()` for user-controlled values in HTML templates to prevent XSS.
 - DB migration pattern: `ALTER TABLE ... ADD COLUMN` guarded by a test SELECT in `init_db`. Column index in `row_to_mount` must be updated when adding columns.
+- Tunnel readiness pattern: `AppState::wait_for_tunnel_ready(timeout)` polls `tunnel_origin` every 200ms up to timeout. Quick mode only; Managed mode returns immediately. Called before `public_url()` in `handle_mount_create` and `handle_mount_inspect`. NOT in `handle_mount_list` (uses `pending:` URL fallback).

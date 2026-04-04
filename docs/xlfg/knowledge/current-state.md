@@ -32,12 +32,12 @@ src/
 - subtle 2 — constant-time credential comparison
 
 ## Test Coverage
-61 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers (public, basic, oauth, oauth_server), logging utilities, tunnel URL parsing, JWKS cache, basic auth credential generation/validation/DB round-trip, RSA key generation, JWT signing/verification, PKCE S256, DCR state, auth code lifecycle, HTML escaping/XSS prevention.
+65 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers (public, basic, oauth, oauth_server), logging utilities, tunnel URL parsing, JWKS cache, basic auth credential generation/validation/DB round-trip, RSA key generation, JWT signing/verification, PKCE S256, DCR state, auth code lifecycle, HTML escaping/XSS prevention, tunnel-wait (ready/timeout/hot-path/managed-bypass).
 
 ## Feature Completeness
 - CLI: all 9 subcommands implemented (run, list, inspect, logs, stop, doctor, daemon, tunnel, gc)
 - Daemon: auto-start from CLI, session eviction, UDS admin API
-- Tunnel: quick mode auto-starts on daemon startup with supervision and restart
+- Tunnel: quick mode auto-starts on daemon startup with supervision and restart; `wait_for_tunnel_ready` in admin handlers ensures mount creation/inspect waits for tunnel URL (bounded 30s poll)
 - Gateway: POST/GET/DELETE on /<slug>/mcp, SSE with keepalive + notification sender infrastructure
 - Auth: **basic (default)**, public (noauth injection), inherit, OAuth (built-in AS + external AS)
   - Basic Auth: auto-generated credentials (mct + 16-char hex), constant-time validation (subtle crate), credentials-in-URL output

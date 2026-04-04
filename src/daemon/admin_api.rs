@@ -179,6 +179,7 @@ async fn handle_mount_create(
         let _ = state.mount_registry.set_status(&record.slug, MountStatus::Ready);
     }
 
+    state.wait_for_tunnel_ready(std::time::Duration::from_secs(30)).await;
     let public_url = state.public_url(&record.slug).await;
 
     // Build credentials URL if Basic Auth
@@ -291,6 +292,7 @@ async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminRespons
     };
 
     let sessions = state.session_manager.active_count(slug).await;
+    state.wait_for_tunnel_ready(std::time::Duration::from_secs(30)).await;
     let public_url = state.public_url(slug).await;
 
     let credentials_url = mount.basic_credentials.as_ref().map(|creds| {
