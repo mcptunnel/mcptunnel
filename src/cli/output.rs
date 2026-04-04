@@ -112,6 +112,15 @@ pub fn print_mount_created(data: &Value, warnings: &[String]) {
             println!("Public MCP URL:");
             println!("{}", mount["public_url"].as_str().unwrap_or("?"));
         }
+
+        // Show OAuth credentials if built-in OAuth mode
+        if let Some(oauth_creds) = mount.get("oauth_credentials") {
+            if !oauth_creds.is_null() {
+                println!("\nOAuth login credentials:");
+                println!("  Username: {}", oauth_creds["username"].as_str().unwrap_or("?"));
+                println!("  Password: {}", oauth_creds["password"].as_str().unwrap_or("?"));
+            }
+        }
     }
 
     if !warnings.is_empty() {
