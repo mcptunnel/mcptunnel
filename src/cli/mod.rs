@@ -114,9 +114,17 @@ pub struct RunArgs {
     #[arg(long)]
     pub scope: Vec<String>,
 
-    /// OIDC issuer URL.
+    /// OIDC issuer URL (for external OAuth AS mode).
     #[arg(long)]
     pub oidc_issuer: Option<String>,
+
+    /// OAuth username (for built-in OAuth AS; auto-generated if omitted).
+    #[arg(long)]
+    pub oauth_user: Option<String>,
+
+    /// OAuth password (for built-in OAuth AS; auto-generated if omitted).
+    #[arg(long)]
+    pub oauth_password: Option<String>,
 
     /// Tool allowlist entry.
     #[arg(long)]

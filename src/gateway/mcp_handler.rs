@@ -39,15 +39,11 @@ pub async fn handle_post_mcp(
         }
     }
 
-    // OAuth enforcement — check bearer token before dispatching
+    // OAuth enforcement — check bearer token for all requests (including initialize).
+    // MCP spec: client gets 401, discovers PRM, does OAuth flow, retries with token.
     if mount.auth_mode == AuthModeConfig::OAuth {
-        let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("");
-        // Allow initialize without auth (so the client can discover auth requirements)
-        // but require auth for all other methods
-        if method != "initialize" {
-            if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
-                return (challenge.0, challenge.1, Json(challenge.2));
-            }
+        if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
+            return (challenge.0, challenge.1, Json(challenge.2));
         }
     }
 
@@ -497,6 +493,11 @@ pub async fn handle_delete_mcp(
             return (resp.0, Json(resp.2));
         }
     }
+    if mount.auth_mode == AuthModeConfig::OAuth {
+        if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
+            return (challenge.0, Json(challenge.2));
+        }
+    }
 
     let session_id = match get_session_id(&headers) {
         Some(sid) => sid,
@@ -552,11 +553,18 @@ pub async fn handle_oauth_metadata(
 
     let resource_url = format!("{}/{}", tunnel_origin, slug);
 
+    // For built-in mode, the AS is the mount itself
+    let authorization_servers = if oauth.builtin {
+        vec![resource_url.clone()]
+    } else {
+        oauth.authorization_servers.clone()
+    };
+
     let metadata = crate::auth::oauth::build_protected_resource_metadata(
         &resource_url,
         &crate::auth::types::OAuthConfig {
             issuer: oauth.issuer.clone(),
-            authorization_servers: oauth.authorization_servers.clone(),
+            authorization_servers,
             default_scopes: oauth.default_scopes.clone(),
             audience: None,
         },
@@ -611,29 +619,51 @@ async fn check_oauth_auth(
         ));
     }
 
-    // Validate token using JWKS cache
-    let oauth_cfg = crate::auth::types::OAuthConfig {
-        issuer: oauth_config.issuer.clone(),
-        authorization_servers: oauth_config.authorization_servers.clone(),
-        default_scopes: oauth_config.default_scopes.clone(),
-        audience: None,
+    // For built-in mode, validate using the local signing key
+    // For external mode, validate using JWKS cache
+    let validation_result = if oauth_config.builtin {
+        // Built-in AS: validate with local decoding key
+        match &state.oauth_server {
+            Some(oauth_state) => {
+                let tunnel_origin = state.tunnel_origin.read().await.clone()
+                    .unwrap_or_else(|| "https://localhost".to_string());
+                let issuer = format!("{}/{}", tunnel_origin.trim_end_matches('/'), mount.slug);
+                let oauth_cfg = crate::auth::types::OAuthConfig {
+                    issuer: issuer.clone(),
+                    authorization_servers: vec![issuer.clone()],
+                    default_scopes: oauth_config.default_scopes.clone(),
+                    audience: Some(issuer),
+                };
+                crate::auth::oauth::validate_bearer_token(
+                    auth_header,
+                    &oauth_cfg,
+                    &oauth_state.signing_key.decoding_key,
+                )
+            }
+            None => Err(crate::auth::oauth::TokenValidationError::InvalidToken(
+                "OAuth server not initialized".to_string(),
+            )),
+        }
+    } else {
+        // External AS: validate with JWKS cache
+        let oauth_cfg = crate::auth::types::OAuthConfig {
+            issuer: oauth_config.issuer.clone(),
+            authorization_servers: oauth_config.authorization_servers.clone(),
+            default_scopes: oauth_config.default_scopes.clone(),
+            audience: None,
+        };
+        crate::auth::oauth::validate_bearer_token_with_cache(
+            auth_header,
+            &oauth_cfg,
+            &state.jwks_cache,
+        ).await
     };
 
-    match crate::auth::oauth::validate_bearer_token_with_cache(
-        auth_header,
-        &oauth_cfg,
-        &state.jwks_cache,
-    ).await {
+    match validation_result {
         Ok(claims) => {
             // Check required scopes
             if !crate::auth::oauth::check_scopes(&claims, &oauth_config.default_scopes) {
                 warn!(slug = %mount.slug, "OAuth: insufficient scope");
-                let tunnel_origin = state.tunnel_origin.read().await.clone()
-                    .unwrap_or_else(|| "https://localhost".to_string());
-                let _resource_metadata_url = format!(
-                    "{}/{}/.well-known/oauth-protected-resource",
-                    tunnel_origin, mount.slug
-                );
                 return Err((
                     StatusCode::FORBIDDEN,
                     HeaderMap::new(),

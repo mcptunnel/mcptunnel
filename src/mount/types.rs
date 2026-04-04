@@ -42,6 +42,13 @@ pub struct OAuthMountConfig {
     pub authorization_servers: Vec<String>,
     pub default_scopes: Vec<String>,
     pub per_tool_scopes: std::collections::HashMap<String, Vec<String>>,
+    /// Whether this mount uses the built-in OAuth AS (true) or an external one (false).
+    #[serde(default)]
+    pub builtin: bool,
+    /// Username for built-in OAuth AS login.
+    pub builtin_user: Option<String>,
+    /// Password for built-in OAuth AS login.
+    pub builtin_password: Option<String>,
 }
 
 /// Mount status.

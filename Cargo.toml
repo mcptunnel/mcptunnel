@@ -46,6 +46,7 @@ rand = "0.8"
 # Auth
 jsonwebtoken = "9"
 reqwest = { version = "0.12", features = ["json"] }
+rsa = { version = "0.9", features = ["pem"] }
 
 # Networking
 ipnet = "2"

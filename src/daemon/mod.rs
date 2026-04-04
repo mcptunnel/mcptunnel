@@ -33,7 +33,15 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
         max_inflight_per_session: config.defaults.max_inflight_per_session,
     };
 
-    let state = Arc::new(AppState::new(config.clone(), mount_registry, session_config));
+    let mut app_state = AppState::new(config.clone(), mount_registry, session_config);
+
+    // Initialize built-in OAuth Authorization Server
+    match app_state.init_oauth_server() {
+        Ok(()) => info!("Built-in OAuth Authorization Server initialized"),
+        Err(e) => warn!(error = %e, "Failed to initialize OAuth server (OAuth auth mode will not work)"),
+    }
+
+    let state = Arc::new(app_state);
 
     // Start session eviction task
     let eviction_state = state.clone();

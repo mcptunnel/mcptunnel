@@ -56,6 +56,29 @@ impl MountRegistry {
             params.basic_credentials
         };
 
+        // Auto-generate OAuth credentials for built-in AS mode
+        let oauth_config = if params.auth_mode == AuthModeConfig::OAuth {
+            params.oauth_config.map(|mut c| {
+                if c.builtin {
+                    if c.builtin_user.is_none() {
+                        c.builtin_user = Some(format!("mct-{}", &uuid::Uuid::new_v4().to_string()[..8]));
+                    }
+                    if c.builtin_password.is_none() {
+                        use rand::Rng;
+                        let password: String = rand::thread_rng()
+                            .sample_iter(&rand::distributions::Alphanumeric)
+                            .take(24)
+                            .map(char::from)
+                            .collect();
+                        c.builtin_password = Some(password);
+                    }
+                }
+                c
+            })
+        } else {
+            params.oauth_config
+        };
+
         let now = chrono::Utc::now();
         let record = MountRecord {
             id: uuid::Uuid::new_v4(),
@@ -65,7 +88,7 @@ impl MountRegistry {
             cwd: params.cwd,
             auth_mode: params.auth_mode,
             basic_credentials,
-            oauth_config: params.oauth_config,
+            oauth_config,
             policy: params.policy,
             tunnel_mode: params.tunnel_mode,
             hostname: params.hostname,

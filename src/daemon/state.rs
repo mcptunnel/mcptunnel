@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::{Notify, RwLock};
 
 use crate::auth::oauth::JwksCache;
+use crate::auth::oauth_server::OAuthServerState;
 use crate::config::Config;
 use crate::mount::MountRegistry;
 use crate::session::SessionManager;
@@ -21,6 +22,8 @@ pub struct AppState {
     pub daemon_instance_id: String,
     pub upstream_children: RwLock<HashMap<String, UpstreamChild>>,
     pub jwks_cache: Arc<JwksCache>,
+    /// Built-in OAuth Authorization Server state (None if not used).
+    pub oauth_server: Option<Arc<OAuthServerState>>,
     /// Per-mount log ring buffers: mount_slug -> Vec<log_line>.
     pub mount_logs: RwLock<HashMap<String, Vec<String>>>,
     /// SSE senders per session ID — for forwarding server notifications to SSE clients.
@@ -43,10 +46,20 @@ impl AppState {
             daemon_instance_id: uuid::Uuid::new_v4().to_string(),
             upstream_children: RwLock::new(HashMap::new()),
             jwks_cache: Arc::new(JwksCache::new()),
+            oauth_server: None,
             mount_logs: RwLock::new(HashMap::new()),
             sse_senders: RwLock::new(HashMap::new()),
             shutdown: Notify::new(),
         }
+    }
+
+    /// Initialize the built-in OAuth server. Call once at daemon startup.
+    pub fn init_oauth_server(&mut self) -> Result<(), String> {
+        if self.oauth_server.is_none() {
+            let server_state = OAuthServerState::new()?;
+            self.oauth_server = Some(Arc::new(server_state));
+        }
+        Ok(())
     }
 
     /// Set the tunnel origin URL.

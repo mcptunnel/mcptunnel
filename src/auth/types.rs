@@ -26,5 +26,8 @@ pub struct ProtectedResourceMetadata {
     pub resource: String,
     pub authorization_servers: Vec<String>,
     pub scopes_supported: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bearer_methods_supported: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_documentation: Option<String>,
 }

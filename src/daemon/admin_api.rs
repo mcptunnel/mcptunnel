@@ -41,6 +41,10 @@ pub struct MountCreateRequest {
     pub tunnel_mode: Option<String>,
     pub hostname: Option<String>,
     pub auth_mode: Option<String>,
+    pub oidc_issuer: Option<String>,
+    pub oauth_user: Option<String>,
+    pub oauth_password: Option<String>,
+    pub scopes: Vec<String>,
     pub allow_tools: Vec<String>,
     pub deny_tools: Vec<String>,
     pub hide_resources: bool,
@@ -88,6 +92,39 @@ async fn handle_mount_create(
         _ => state.config.defaults.probe_mode,
     };
 
+    // Build OAuth config if auth mode is OAuth
+    let oauth_config = if auth_mode == AuthModeConfig::OAuth {
+        if let Some(ref issuer) = req.oidc_issuer {
+            // External AS mode
+            Some(OAuthMountConfig {
+                issuer: issuer.clone(),
+                authorization_servers: vec![issuer.clone()],
+                default_scopes: req.scopes.clone(),
+                per_tool_scopes: std::collections::HashMap::new(),
+                builtin: false,
+                builtin_user: None,
+                builtin_password: None,
+            })
+        } else {
+            // Built-in AS mode — credentials will be auto-generated in mount registry if needed
+            Some(OAuthMountConfig {
+                issuer: String::new(), // Will be set to tunnel_origin/slug at runtime
+                authorization_servers: vec![],
+                default_scopes: if req.scopes.is_empty() {
+                    vec!["mcp:read".to_string()]
+                } else {
+                    req.scopes.clone()
+                },
+                per_tool_scopes: std::collections::HashMap::new(),
+                builtin: true,
+                builtin_user: req.oauth_user,
+                builtin_password: req.oauth_password,
+            })
+        }
+    } else {
+        None
+    };
+
     let params = MountCreateParams {
         slug: req.slug,
         display_name: req.display_name,
@@ -100,7 +137,7 @@ async fn handle_mount_create(
         hostname: req.hostname,
         auth_mode,
         basic_credentials: None,
-        oauth_config: None,
+        oauth_config,
         policy: crate::policy::types::PolicyConfig {
             allow_tools: req.allow_tools,
             deny_tools: req.deny_tools,
@@ -149,6 +186,18 @@ async fn handle_mount_create(
         crate::auth::basic::build_credentials_url(&public_url, creds)
     });
 
+    // Include OAuth credentials if built-in mode
+    let oauth_credentials = record.oauth_config.as_ref().and_then(|c| {
+        if c.builtin {
+            Some(serde_json::json!({
+                "username": c.builtin_user,
+                "password": c.builtin_password,
+            }))
+        } else {
+            None
+        }
+    });
+
     AdminResponse::Ok {
         data: serde_json::json!({
             "mount": {
@@ -159,6 +208,7 @@ async fn handle_mount_create(
                 "tunnel_mode": tunnel_mode.to_string(),
                 "public_url": public_url,
                 "credentials_url": credentials_url,
+                "oauth_credentials": oauth_credentials,
             }
         }),
     }

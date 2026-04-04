@@ -239,6 +239,7 @@ pub fn build_protected_resource_metadata(
         resource: resource_url.to_string(),
         authorization_servers: config.authorization_servers.clone(),
         scopes_supported: config.default_scopes.clone(),
+        bearer_methods_supported: Some(vec!["header".to_string()]),
         resource_documentation: Some(resource_url.to_string()),
     }
 }

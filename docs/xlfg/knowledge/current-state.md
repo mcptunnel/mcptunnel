@@ -15,7 +15,7 @@ src/
   session/{mod,types}.rs
   upstream/{mod,probe,child}.rs
   policy/{mod,filter,types}.rs
-  auth/{mod,public,oauth,types}.rs
+  auth/{mod,public,oauth,oauth_server,types}.rs
 ```
 
 ## Key Crates
@@ -25,21 +25,24 @@ src/
 - clap 4 — CLI
 - tokio 1 — async runtime
 - tracing — structured logging
-- jsonwebtoken 9 — JWT validation
+- jsonwebtoken 9 — JWT validation + signing
+- rsa 0.9 — RSA key pair generation (pure Rust)
 - tokio-stream — SSE streaming
 - base64 0.22 — HTTP Basic Auth decoding
 - subtle 2 — constant-time credential comparison
 
 ## Test Coverage
-47 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers (public, basic, oauth), logging utilities, tunnel URL parsing, JWKS cache, basic auth credential generation/validation/DB round-trip.
+61 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers (public, basic, oauth, oauth_server), logging utilities, tunnel URL parsing, JWKS cache, basic auth credential generation/validation/DB round-trip, RSA key generation, JWT signing/verification, PKCE S256, DCR state, auth code lifecycle, HTML escaping/XSS prevention.
 
 ## Feature Completeness
 - CLI: all 9 subcommands implemented (run, list, inspect, logs, stop, doctor, daemon, tunnel, gc)
 - Daemon: auto-start from CLI, session eviction, UDS admin API
 - Tunnel: quick mode auto-starts on daemon startup with supervision and restart
 - Gateway: POST/GET/DELETE on /<slug>/mcp, SSE with keepalive + notification sender infrastructure
-- Auth: **basic (default)**, public (noauth injection), inherit, OAuth (JWKS-backed JWT validation, scope checking)
+- Auth: **basic (default)**, public (noauth injection), inherit, OAuth (built-in AS + external AS)
   - Basic Auth: auto-generated credentials (mct + 16-char hex), constant-time validation (subtle crate), credentials-in-URL output
+  - OAuth (built-in AS): full MCP-spec-compliant OAuth 2.1 Authorization Server — DCR (RFC 7591), PKCE S256, authorization code flow, JWT token issuance (RS256), JWKS endpoint, AS metadata (RFC 8414), Protected Resource Metadata (RFC 9728). Auto-generated user/password. Compatible with ChatGPT MCP integration.
+  - OAuth (external AS): JWKS-backed JWT validation from external OIDC provider via `--oidc-issuer`
 - Policy: tool/resource/prompt filtering at list and invoke time
 - Observability: structured logging, per-mount log ring buffer, doctor diagnostics, inspect
 
