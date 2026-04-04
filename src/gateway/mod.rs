@@ -31,9 +31,19 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/.well-known/oauth-protected-resource/{slug}",
             get(oauth_server::handle_prm_path_based),
         )
+        // ChatGPT appends the full MCP path (/{slug}/mcp) to .well-known URLs,
+        // so we need routes with the /mcp suffix pointing to the same handlers.
+        .route(
+            "/.well-known/oauth-protected-resource/{slug}/mcp",
+            get(oauth_server::handle_prm_path_based),
+        )
         // OAuth Authorization Server endpoints (built-in AS)
         .route(
             "/.well-known/oauth-authorization-server/{slug}",
+            get(oauth_server::handle_as_metadata),
+        )
+        .route(
+            "/.well-known/oauth-authorization-server/{slug}/mcp",
             get(oauth_server::handle_as_metadata),
         )
         .route(
