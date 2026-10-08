@@ -179,7 +179,8 @@ Run regression tests and the pinned official fixture using the commands in the [
 | Tasks, subscriptions, sampling/elicitation, logging, MCP Apps | UNSUPPORTED | Not advertised; Tasks and legacy callback/subscription checks retain failures |
 | Stable managed hostname | UNSUPPORTED | No trusted paid backend; provision/renew/revoke fail closed |
 | External browser OAuth/CIMD/DCR/PKCE | NOT TESTED | Resource server is implemented; external AS/client flow unavailable |
-| Live Quick edge, client URL update after reconnect, independent HTTPS proxy | NOT TESTED | URL parser/restart behavior tested with a fake provider process only |
-| Linux/macOS platform run | NOT TESTED locally | Three-platform CI configured; not executed or pushed in this task |
+| Live Quick edge with official Filesystem MCP | PASS | Windows public HTTPS: Basic auth, modern stateless discovery, read/list, write denial and unauthenticated rejection; not an AI-client E2E test |
+| Client URL update after live reconnect, independent HTTPS proxy | NOT TESTED | URL parser/restart behavior tested with a fake provider process only |
+| Linux/macOS/Windows platform CI | PASS | [Executed CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37839162800); separate five-target binary installer checks are recorded in release evidence |
 
 Before claiming a real client PASS, record client build, account eligibility, revision, URL transport, auth mode and results for all ten operations. Use dedicated test credentials, retain redacted evidence, and explicitly record unsupported resource/prompt UI behavior. Changing a client's version requires re-verification.

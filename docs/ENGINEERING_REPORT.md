@@ -4,6 +4,10 @@ Version **0.2.2**, local Windows verification with Rust 1.88.0 and Node 22.23.2.
 
 Version **0.2.3** adds native binary distribution, verified user-level installers, a real official Filesystem MCP quick start and a gated five-target release workflow. Local Windows verification passed the existing 63 tests, fmt, strict Clippy and release build; actual ZIP installation/reinstallation with spaces and corrupt-download rejection; the official cloudflared download/hash/version; and the documented cmd/npx Filesystem command over local HTTP with Basic authentication, read/list and denied writes. See [release procedure and target requirements](RELEASING.md). Configured release jobs do not count as passed builds until their Actions run succeeds.
 
+The [native candidate Actions run](https://github.com/mcptunnel/mcptunnel/actions/runs/37847992850) has now passed all five builds, real installers and documented npx/server checks. [Candidate artifacts and exact checksums](BINARY_RELEASE_RESULTS.json) are recorded separately from published releases. Public downloads await the owner's choice of repository visibility/destination.
+
+The same implementation commit also passed the [complete 0.2.3 Linux/macOS/Windows CI](https://github.com/mcptunnel/mcptunnel/actions/runs/37847936476), including all Rust gates and the 50-scenario supported conformance subset.
+
 The same packaged binary and documented npx launcher also passed these checks over an actual public Cloudflare Quick HTTPS URL. The first immediate connection preceded DNS propagation and failed; a bounded readiness check then observed a real health response, followed by successful authenticated discovery/read/list, policy denial and unauthenticated rejection. Test mounts, daemons and tunnel processes were stopped afterward.
 
 **Achieved locally:** a current stateless HTTP client invokes a legacy stdio tool; legacy initialization sessions continue working; supported synchronous gateway conformance scenarios pass; authentication/session/process isolation is tested; Quick configuration permits only temporary origins; unimplemented managed provisioning fails closed. **Full conformance and actual AI-client E2E have not been achieved.** The exact remaining evidence is below.
@@ -113,7 +117,7 @@ The runner waits for probe/readiness, uses port 43123, writes timestamped raw re
 
 [Client compatibility](CLIENT_COMPATIBILITY.md) distinguishes official configuration documentation from protocol fixtures and account-backed E2E. All actual AI-client tests remain NOT TESTED. Basic public/current and external JWT/legacy HTTP combinations have focused tests; a transport-supported client is not assumed to negotiate 2026-07-28. No client configuration was altered. No secrets appear in durable evidence.
 
-Live Cloudflare connectivity/reconnection, a public reverse proxy, external AS TLS discovery/key rotation/browser PKCE/CIMD/DCR/refresh, client accounts and OpenAI API billing require infrastructure/credentials unavailable in this task. Linux/macOS CI is configured but was not executed; Windows cross-user named-pipe ACL behavior remains untested.
+Live public Quick connectivity passed the actual Filesystem MCP checks described above; live reconnect/client URL replacement remains untested. A public reverse proxy, external AS TLS discovery/key rotation/browser PKCE/CIMD/DCR/refresh, client accounts and OpenAI API billing remain unavailable. Linux/macOS/Windows CI passed after the authorized push. Windows cross-user named-pipe ACL behavior remains untested.
 
 Managed hosting requires a trusted service that authenticates accounts, verifies paid entitlement, records hostname ownership, provisions routes, renews expiring leases and revokes routing. No such service exists here. `ManagedProvisioner` is a fail-closed future boundary; local config cannot enable managed provisioning. Entitlement loss and real provider revocation require hosted tests before enabling it. Independent MIT hosting remains available without an account.
 
@@ -123,11 +127,11 @@ Managed hosting requires a trusted service that authenticates accounts, verifies
 |---|---|
 | P0 | No known unaddressed P0 finding within the implemented synchronous scope. This is not a security certification; upstream tools retain user permissions. Built-in/inherit auth and managed mode remain disabled rather than claiming safety without their required services. |
 | P1 | Full interactive conformance does not pass. Implement and test a real callback/MRTR bridge before claiming that functionality; add official HTTP-only fixture diagnostics when doing so. |
-| P1 | Run actual named-client E2E, external authorization flows/key rotation, public Quick and independent proxy tests. Record exact client builds and revisions instead of inferring them. |
-| P1 | Execute Linux/macOS CI, and verify Windows IPC against a different local user; platform support outside the local Windows run is provisional. |
+| P1 | Run actual named-client E2E, external authorization flows/key rotation, live Quick reconnection and independent proxy tests. Basic public Quick discovery/read/list/policy checks now pass with the real Filesystem server; exact AI-client builds and revisions remain unverified. |
+| P1 | Verify Windows IPC against a different local user. Three-platform CI passed; new binary targets additionally require their native release/install smoke runs. |
 | P1 | Legacy explicit cross-request cancellation is not mapped, and JSON-response connection aborts are not directly tested. Add authenticated session/request-ID routing and a JSON-abort regression before claiming all cancellation paths. SSE disconnect and hard timeout cancellation pass. |
 | P2 | Benchmark cold-process latency and sustained load. Process isolation bounds state but is not yet performance-qualified for a production workload. |
 | P2 | Define schema/probe refresh policy for dynamically changing upstream catalogs; current schema snapshot requires an operator probe. |
 | P2 | Evaluate optional Tasks/subscriptions/Apps only with a justified use case and conformance coverage. A real paid backend/provider lifecycle is separate work, not a hidden local feature. |
 
-The code and docs intentionally limit their claims to these results. Local helper processes are cleaned up; the final Git work is committed with version bumps, without remote publication.
+The code and docs intentionally limit their claims to these results. Local helper processes are cleaned up; implementation work is committed with version bumps and pushed with authorization. Public binary publication requires a public download destination.

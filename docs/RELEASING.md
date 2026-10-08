@@ -39,6 +39,12 @@ Cloudflared is pinned to 2026.10.0 with per-platform digests from its official G
 
 ## Evidence
 
-The earlier 0.2.2 [three-platform CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37839162800) passed all Rust and supported conformance jobs. New release checks are reported by their actual Actions runs; configured targets alone are not proof of successful builds.
+The earlier 0.2.2 [three-platform CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37839162800) passed all Rust and supported conformance jobs.
+
+The 0.2.3 [full CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37847936476) also passed on Linux/macOS/Windows: evidence checks, fmt, strict Clippy, 63 tests per platform and release builds, plus all 50 supported conformance scenarios.
+
+The 0.2.3 [native candidate run](https://github.com/mcptunnel/mcptunnel/actions/runs/37847992850), built from source commit 94831e0, passed all five target jobs. Every archive passed install/reinstall, paths with spaces, corrupt-download rejection and the documented official Filesystem MCP launcher with Basic auth, modern discovery, read/list and write denial. All five downloaded archive digests were verified locally. [Exact candidate checksums and results](BINARY_RELEASE_RESULTS.json) are retained. These are candidate artifacts, not a published release; a rebuilt tagged release will have its own SHA256SUMS.
+
+Public Quick HTTPS also passed the same operations on Windows with the actual Cloudflare provider. No actual AI-client E2E or full-conformance PASS is implied.
 
 Primary sources: [GitHub runner architectures](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create), [official Filesystem MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem), [Cloudflared 2026.10.0](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.0).

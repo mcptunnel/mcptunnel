@@ -1,0 +1,82 @@
+{
+  "kind": "verified-release-candidate",
+  "version": "0.2.3",
+  "sourceCommit": "94831e068416add4a615c6875856b189f5e76177",
+  "date": "2026-10-08",
+  "workflowRun": "https://github.com/mcptunnel/mcptunnel/actions/runs/37847992850",
+  "serverPackage": "@modelcontextprotocol/server-filesystem@2026.8.31",
+  "archives": [
+    {
+      "name": "mcptunnel-v0.2.3-aarch64-apple-darwin.tar.gz",
+      "sha256": "8df779f7b654dbd5d2ae6223ce7b0e8d366251c2ad6bb3390ea1b91dc177b6fc",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    },
+    {
+      "name": "mcptunnel-v0.2.3-aarch64-unknown-linux-gnu.tar.gz",
+      "sha256": "b1d9c7235355c654b944af72947303daf0a126e23d2db11fb853017667505d07",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    },
+    {
+      "name": "mcptunnel-v0.2.3-x86_64-apple-darwin.tar.gz",
+      "sha256": "c6f84e6156a77f51a9b4e0582e3acc3b311b9394fbdb48c5be51e170f00ff63c",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    },
+    {
+      "name": "mcptunnel-v0.2.3-x86_64-pc-windows-msvc.zip",
+      "sha256": "c22de55461625c5a82261106dba82547c73973b2e2aa800cc575b888f33694da",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    },
+    {
+      "name": "mcptunnel-v0.2.3-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "a8b34b254f0cdc7d46714383ae2f1935d77707fc3a8fc3b6b333cf674e4aaec2",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    }
+  ],
+  "localPublicQuickHttps": {
+    "status": "PASS",
+    "platform": "Windows x64",
+    "checks": [
+      "Basic authentication",
+      "2026-07-28 stateless tools/list",
+      "read_text_file",
+      "list_directory",
+      "write_file denied",
+      "unauthenticated request rejected"
+    ]
+  },
+  "published": false,
+  "publicationBlocker": "Source repository is private; public download destination awaits owner decision",
+  "actualAiClientE2e": "NOT TESTED",
+  "fullProtocolConformance": "FAIL; see CONFORMANCE_RESULTS.json",
+  "rustCi": {
+    "status": "PASS",
+    "workflowRun": "https://github.com/mcptunnel/mcptunnel/actions/runs/37847936476",
+    "platforms": [
+      "Linux",
+      "macOS",
+      "Windows"
+    ],
+    "testsPerPlatform": 63,
+    "supportedConformanceScenarios": 50
+  }
+}
