@@ -4,36 +4,67 @@ Bridge a local stdio MCP server to Streamable HTTP. Modern clients can invoke le
 
 **Free Quick mode uses temporary random URLs and synchronous JSON. Basic authentication is the default. Official managed stable hosting is unavailable until a trusted paid provisioning service exists.**
 
-## Install and free quick start
+## Install
 
-Requirements: Rust 1.88+, your stdio server runtime, and [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/). Node 22+ is needed for repository tests and the demo fixture.
+Download a ready-to-run binary. **No Rust, Cargo, or repository clone required.** The installer also installs Cloudflare's official `cloudflared` binary if it is missing. Both downloads are checked against SHA-256 digests before installation.
 
-```sh
-git clone https://github.com/mcptunnel/mcptunnel.git
-cd mcptunnel
-cargo install --locked --path .
-mcptunnel -- node tests/fixtures/legacy.cjs
+**Windows — PowerShell**
+
+```powershell
+irm https://github.com/mcptunnel/mcptunnel/releases/latest/download/install.ps1 | iex
+mcptunnel --version
 ```
 
-Replace `node tests/fixtures/legacy.cjs` with your installed stdio server command. The daemon starts automatically, probes the server, and opens a free Quick Tunnel. The demo is a deterministic test fixture, not a production tool service.
+**macOS / Linux**
+
+```sh
+curl -fsSL https://github.com/mcptunnel/mcptunnel/releases/latest/download/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+mcptunnel --version
+```
+
+Windows installs into `%LOCALAPPDATA%\mcptunnel\bin` and adds it to your user PATH. macOS/Linux installs into `~/.local/bin`; add the shown export to your shell profile for future terminals. Neither installer needs administrator access.
+
+Prefer a manual download? [Get the archive for your OS and CPU](https://github.com/mcptunnel/mcptunnel/releases/latest), check `SHA256SUMS`, extract it, and put the executable on PATH. Releases cover Windows x64, macOS Intel/Apple Silicon, and Linux x64/ARM64. Linux requires OpenSSL 3 and glibc 2.35+ on x64 (Ubuntu 22.04+) or glibc 2.39+ on ARM64 (Ubuntu 24.04+); Alpine/musl is not supported. MCP servers still require their own runtime. The example below requires [Node.js 22+](https://nodejs.org/en/download).
+
+## Quick start
+
+Expose the official [Filesystem MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) over HTTPS. This example shares only a new `shared` directory and allows two read-only tools.
+
+**macOS / Linux**
+
+```sh
+mkdir -p shared
+printf 'Hello from Filesystem MCP!\n' > shared/hello.txt
+mcptunnel run --slug files --allow-tool read_text_file --allow-tool list_directory -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 "$PWD/shared"
+```
+
+**Windows — PowerShell**
+
+```powershell
+New-Item -ItemType Directory -Path shared -Force | Out-Null
+Set-Content shared/hello.txt 'Hello from Filesystem MCP!'
+mcptunnel run --slug files --allow-tool read_text_file --allow-tool list_directory -- cmd /d /c npx -y @modelcontextprotocol/server-filesystem@2026.8.31 "$PWD/shared"
+```
+
+The daemon starts automatically and opens a free Quick Tunnel. Connect your client using the printed URL and Authorization header, then ask it to list the shared directory or read `hello.txt` using its absolute path. File-writing tools are neither listed nor callable through this mount.
+
+The package version is pinned to the real server used in our release verification. The first `npx` run downloads it. On a slow connection, cache it first with `npm exec --yes --package=@modelcontextprotocol/server-filesystem@2026.8.31 -- node --version`, then repeat the command.
 
 Creation prints a plain `https://<random>.trycloudflare.com/<slug>/mcp` URL and an `Authorization: Basic ...` header once. Save the header privately. Inspection does not reveal credentials; recreate a Basic mount if you lose them. `--json` creation also contains credentials and must be stored privately. A pending URL means the provider has not announced an origin; inspect `mcptunnel tunnel status` and `mcptunnel doctor`.
 
 Use the complete `/slug/mcp` URL and the creation header in a client supporting HTTP headers. Do not put credentials in URL userinfo. ChatGPT Basic support is unverified; use its documented external OAuth or explicit no-auth flow. Claude documents fixed Authorization headers for limited beta organizations. Actual client tests remain NOT TESTED. See [copy/paste client configurations and the evidence matrix](docs/CLIENT_COMPATIBILITY.md).
 
-Windows: use `node`, an absolute executable path, or the full `npx.cmd` path when a package launcher is not found. The mount captures the creating CLI's working directory; `--cwd` overrides it. The daemon uses a local named pipe on Windows and a restricted Unix socket on Linux/macOS.
-
-No binary release or registry publication was performed by this modernization. CI produces build artifacts; source installation is the verified installation path.
+The mount captures the creating CLI's working directory; `--cwd` overrides it. Windows package launchers use `cmd /d /c`; executable paths and `node` work directly.
 
 ## Register, restrict, inspect, stop
 
 ```sh
-mcptunnel run --slug demo --allow-tool echo -- node tests/fixtures/legacy.cjs
 mcptunnel list
-mcptunnel inspect demo
-mcptunnel doctor demo --json
-mcptunnel logs demo
-mcptunnel stop demo
+mcptunnel inspect files
+mcptunnel doctor files --json
+mcptunnel logs files
+mcptunnel stop files
 mcptunnel daemon stop --force
 ```
 
@@ -42,7 +73,7 @@ All mounts share the daemon's provider. Deny rules override allow rules. `--hide
 An intentionally public endpoint is explicit:
 
 ```sh
-mcptunnel run --slug public-demo --auth public --allow-tool echo -- node tests/fixtures/legacy.cjs
+mcptunnel run --slug public-files --auth public --allow-tool read_text_file --allow-tool list_directory -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 "$PWD/shared"
 ```
 
 Anyone with that URL can invoke the exposed operations. Public mode is not selected automatically for client compatibility.
@@ -70,7 +101,7 @@ The gateway passes the explicitly selected supported conformance subset. **Full 
 The insecure built-in authorization server has been removed. Existing built-in OAuth and inherit-auth mounts fail closed. Recreate them with Basic, explicit public mode, or an external issuer:
 
 ```sh
-mcptunnel run --slug private --auth oauth --oidc-issuer https://issuer.example --scope read -- node tests/fixtures/legacy.cjs
+mcptunnel run --slug private --auth oauth --oidc-issuer https://issuer.example --scope read --allow-tool read_text_file --allow-tool list_directory -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 "$PWD/shared"
 ```
 
 Configure your authorization server to issue **RS256 JWT access tokens** whose audience is the exact current full MCP URL. Issuer, subject, audience, expiration, not-before and scopes are validated. Discovery/JWKS uses HTTPS, bounded documents and issuer-scoped cached keys. Tokens never enter stdio parameters or environment variables.
@@ -93,7 +124,7 @@ Point `MCPTUNNEL_CONFIG` at this file, restart the daemon, and create mounts wit
 
 Independent infrastructure is allowed by the MIT license and needs no mcptunnel account or plan. Quick mode rejects `external_origin` and hostname assignment. Official `--tunnel managed` fails with an unavailable-backend error: a local plan flag cannot prove paid entitlement. [Tunnel architecture and future server-side provision/renew/revoke boundary](docs/TUNNEL_PLANS.md).
 
-Cloudflare documents Quick Tunnels as development-only and without SSE. URLs change on restart/reconnect, clients need the replacement URL, and there is no uptime guarantee. Live public Quick connectivity was not exercised in this task. [Provider documentation](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+Cloudflare documents Quick Tunnels as development-only and without SSE. URLs change on restart/reconnect, clients need the replacement URL, and there is no uptime guarantee. The official Filesystem MCP example passed actual public Quick HTTPS checks with Basic auth, discovery, read/list and write denial on Windows. A newly announced URL can briefly precede DNS readiness. [Provider documentation](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
 ## Troubleshooting
 
@@ -113,6 +144,8 @@ Cloudflare documents Quick Tunnels as development-only and without SSE. URLs cha
 
 ## Verification and contributing
 
+Building from source is for contributors (Rust 1.88+, Node 22+):
+
 ```sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
@@ -120,6 +153,8 @@ cargo test --all-targets
 cargo build --release
 ```
 
-Tests include real HTTP/stdio processes, Windows IPC, process-tree cleanup, and the real 60-second timeout. CI runs these checks on Linux, macOS and Windows and the supported official conformance subset on Linux. Linux/macOS CI execution and account-backed clients remain unverified until those runs occur.
+Tests include real HTTP/stdio processes, Windows IPC, process-tree cleanup, and the real 60-second timeout. Linux, macOS and Windows CI plus the supported official conformance subset passed for 0.2.2. Each tagged release must repeat these checks and pass actual binary-installation and official Filesystem MCP checks on all five release targets before publication. Actual account-backed AI clients remain unverified.
+
+Maintainers: see [release procedure and installer options](docs/RELEASING.md).
 
 See [research](docs/RESEARCH.md), [protocol/security audit](docs/PROTOCOL_AUDIT.md), [client compatibility](docs/CLIENT_COMPATIBILITY.md), and [engineering report](docs/ENGINEERING_REPORT.md). Licensed under [MIT](LICENSE).

@@ -33,3 +33,13 @@ No community post or paper is used to override the official standard. Sources ag
 - Optional callbacks, Tasks, subscriptions, and MCP Apps are not advertised. Review their support separately from synchronous operations.
 
 The old SDK migration is validated by compiling every target and exercising a real stdio child over HTTP. No documentation claim substitutes for those checks.
+
+## Binary distribution and real quick start — 2026-10-08
+
+The official [Filesystem server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) documents npx installation, Windows cmd launchers and the read_text_file/list_directory tools. npm reported package 2026.8.31; the example and release smoke pin that exact package. The actual Windows packaged binary and README launcher passed Basic authentication, modern stateless tool discovery, reading/listing a directory with spaces, denied writes and unauthenticated rejection.
+
+[Playwright MCP](https://github.com/microsoft/playwright-mcp) is another widely used candidate, corroborated by this [community discussion](https://www.reddit.com/r/MCPservers/comments/1wc06hk/opensource_mcp_of_the_week_37k_stars_playwright/). Its official documentation emphasizes persistent browser state. Filesystem was selected for the first example because its reads are independently meaningful with the gateway's modern per-request process isolation. No Playwright end-to-end PASS is claimed.
+
+The earlier [security landscape paper](https://arxiv.org/abs/2503.23278), repository process-isolation tests and official server behavior support retaining a narrow read-only tool policy rather than exposing an unrestricted filesystem example. Scholarly/community material is supporting context; executable server checks provide the compatibility evidence.
+
+[GitHub runner documentation](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) provides native x64/ARM64 runners; [release CLI documentation](https://cli.github.com/manual/gh_release_create) supports uploading assets before publishing. [Cloudflared 2026.10.0](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.0) supplies the official per-asset SHA-256 digests pinned by the installers. Windows download/hash/version checks actually passed. Checksums protect download integrity; unsigned release checksums are not independent publisher signatures.

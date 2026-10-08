@@ -1,0 +1,44 @@
+# Binary releases
+
+End users install from [GitHub Releases](https://github.com/mcptunnel/mcptunnel/releases), not Cargo. The release archives contain mcptunnel, its README and MIT license. Cloudflared is downloaded separately from Cloudflare's official release by the installer.
+
+## Targets
+
+| Archive target | Native build / verification runner | Runtime |
+|---|---|---|
+| x86_64-pc-windows-msvc | Windows Server 2022 x64 | Windows x64; ARM64 emulation |
+| x86_64-apple-darwin | macOS 15 Intel | macOS 15+ |
+| aarch64-apple-darwin | macOS 14 Apple Silicon | macOS 14+ |
+| x86_64-unknown-linux-gnu | Ubuntu 22.04 x64 | glibc 2.35+, OpenSSL 3 |
+| aarch64-unknown-linux-gnu | Ubuntu 24.04 ARM64 | glibc 2.39+, OpenSSL 3 |
+
+No Alpine/musl or native Windows ARM64 binary is advertised. Binaries are not code-signed or Apple-notarized; operating systems may require the user's normal downloaded-app approval.
+
+## Publish
+
+1. Bump Cargo.toml/Cargo.lock and write docs/releases/vX.Y.Z.md.
+2. Verify locally: fmt, strict Clippy, all-target tests, release build, archive, installer, and real Filesystem MCP smoke.
+3. Commit with a Conventional Commit and push the branch.
+4. Create an annotated vX.Y.Z tag at that verified commit and push that tag.
+5. The release workflow builds all five targets and tests the real archive installers, including corrupt-download rejection and paths with spaces. It also tests Basic auth, discovery, read/list and denied writes against the official Filesystem MCP. The reusable CI runs the full Rust checks and supported official conformance subset.
+6. Only when all jobs pass does the workflow create a draft, upload all assets, then publish the complete release. Confirm the assets and install from the public URL before announcing it.
+
+Never move an existing release tag to a new implementation. Correct failures in a new package version and tag. A failed publish can leave a draft; inspect and recover that draft rather than replacing a public release.
+
+For a candidate build without publication, run the native-binary workflow manually on a branch. This builds and tests all five archives and retains them as Actions artifacts; publication runs only for version tags. Public installers require a public release repository. Do not change source-repository visibility without the owner's authorization.
+
+## Installer controls
+
+PowerShell: download install.ps1 and run with -Version vX.Y.Z, -InstallDir PATH, -NoPath, or -SkipCloudflared. Offline installation accepts -AssetsDirectory PATH and requires an explicit version.
+
+Shell: MCPTUNNEL_VERSION, MCPTUNNEL_INSTALL_DIR, MCPTUNNEL_SKIP_CLOUDFLARED=1, and MCPTUNNEL_ASSET_DIR control the same settings. The shell installer prints PATH guidance without editing shell profiles.
+
+Offline assets must include the matching archive and SHA256SUMS. Both installers reject mismatches before writing executables or changing PATH. SHA256SUMS checks download integrity; it is not an independent publisher signature. The installer script itself must come from the trusted repository/release.
+
+Cloudflared is pinned to 2026.10.0 with per-platform digests from its official GitHub release. An existing executable is preserved. Update this pin and verify all digests together when changing it.
+
+## Evidence
+
+The earlier 0.2.2 [three-platform CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37839162800) passed all Rust and supported conformance jobs. New release checks are reported by their actual Actions runs; configured targets alone are not proof of successful builds.
+
+Primary sources: [GitHub runner architectures](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create), [official Filesystem MCP](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem), [Cloudflared 2026.10.0](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.0).

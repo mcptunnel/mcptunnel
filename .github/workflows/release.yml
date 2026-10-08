@@ -1,0 +1,93 @@
+name: Publish native binaries
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/ci.yml
+  binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.88.0'
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify tag and release notes
+        shell: bash
+        run: |
+          node -e 'const fs=require("fs"); const version=fs.readFileSync("Cargo.toml","utf8").match(/^version = "([^"]+)"/m)[1]; if(process.env.GITHUB_REF_TYPE==="tag" && process.env.GITHUB_REF_NAME!=="v"+version) throw Error("Tag and package version differ"); fs.accessSync("docs/releases/v"+version+".md");'
+      - run: cargo build --locked --release --target ${{ matrix.target }}
+      - run: node scripts/package-release.mjs ${{ matrix.target }}
+      - run: node scripts/test-release.mjs ${{ matrix.target }}
+      - name: Install real official Filesystem MCP
+        run: npm exec --yes --package=@modelcontextprotocol/server-filesystem@2026.8.31 -- node --version
+      - name: Test release binary against real Filesystem MCP
+        shell: bash
+        run: |
+          binary="target/${{ matrix.target }}/release/mcptunnel"
+          if [[ "${{ runner.os }}" == Windows ]]; then binary="$binary.exe"; fi
+          node scripts/smoke-filesystem.mjs "$binary" --npx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            target/dist/*.tar.gz
+            target/dist/*.zip
+            target/dist/*.sha256
+          if-no-files-found: error
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [verify, binaries]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: target/dist
+          merge-multiple: true
+      - name: Verify and combine archive checksums
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs"; import crypto from "node:crypto";
+            const dir="target/dist";
+            const sums=fs.readdirSync(dir).filter(f=>f.endsWith(".sha256")).sort();
+            if(sums.length!==5) throw Error("Expected five verified native archives");
+            for(const sum of sums) { const [expected,name]=fs.readFileSync(dir+"/"+sum,"utf8").trim().split(/\s+/); const actual=crypto.createHash("sha256").update(fs.readFileSync(dir+"/"+name)).digest("hex"); if(actual!==expected) throw Error("Checksum mismatch: "+name); }
+            fs.writeFileSync(dir+"/SHA256SUMS",sums.map(f=>fs.readFileSync(dir+"/"+f,"utf8")).join(""));'
+      - name: Publish only after all verification passes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" target/dist/*.tar.gz target/dist/*.zip target/dist/SHA256SUMS install.sh install.ps1 --verify-tag --title "mcptunnel $GITHUB_REF_NAME" --notes-file "docs/releases/$GITHUB_REF_NAME.md" --draft
+          gh release edit "$GITHUB_REF_NAME" --draft=false
