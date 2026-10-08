@@ -32,7 +32,7 @@ impl UpstreamChild {
         cwd: Option<&str>,
         env_vars: &[(String, String)],
     ) -> Result<Self, crate::error::McpTunnelError> {
-        let mut cmd = Command::new(&config.program);
+        let mut cmd = Command::new(resolve_program(&config.program));
         cmd.args(&config.args).kill_on_drop(true);
         #[cfg(windows)]
         cmd.creation_flags(0x08000000);
@@ -153,6 +153,23 @@ impl UpstreamChild {
     pub fn cancel(&self) {
         self.client.cancellation_token().cancel();
     }
+}
+
+fn resolve_program(program: &str) -> std::path::PathBuf {
+    #[cfg(windows)]
+    if std::path::Path::new(program).extension().is_none() {
+        // Let Rust's Command implementation quote batch arguments, without building shell text.
+        let paths = std::env::var_os("PATH").unwrap_or_default();
+        for directory in std::env::split_paths(&paths) {
+            for extension in ["exe", "cmd", "bat"] {
+                let candidate = directory.join(format!("{program}.{extension}"));
+                if candidate.is_file() {
+                    return candidate;
+                }
+            }
+        }
+    }
+    program.into()
 }
 
 fn map_error(error: ServiceError) -> ErrorData {

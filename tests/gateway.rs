@@ -48,6 +48,8 @@ async fn server_options(
     ] {
         let record = registry
             .create(MountCreateParams {
+                port: listener.local_addr().unwrap().port(),
+                path: Some(format!("/{slug}/mcp")),
                 slug: Some(slug.into()),
                 display_name: None,
                 command: CommandConfig {

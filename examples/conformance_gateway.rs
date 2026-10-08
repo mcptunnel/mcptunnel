@@ -20,6 +20,8 @@ async fn main() -> anyhow::Result<()> {
     db::init_db(&conn)?;
     let registry = MountRegistry::new(Arc::new(Mutex::new(conn)));
     let mount = registry.create(MountCreateParams {
+        port: 43123,
+        path: Some("/test/mcp".into()),
         slug: Some("test".into()),
         display_name: None,
         command: CommandConfig {

@@ -167,7 +167,7 @@ pub fn mount_checks(mount: &crate::mount::types::MountRecord) -> Vec<DoctorCheck
         AuthModeConfig::Basic if mount.basic_credentials.is_some() => (DoctorStatus::Pass,"Basic requires the Authorization header printed at creation; URL userinfo is unsupported. Claude documents fixed Authorization headers for limited beta organizations; ChatGPT Basic support and actual client E2E remain unverified. See docs/CLIENT_COMPATIBILITY.md."),
         AuthModeConfig::Basic => (DoctorStatus::Fail,"Basic credentials missing; recreate the mount."),
         AuthModeConfig::Inherit => (DoctorStatus::Fail,"stdio authentication cannot protect HTTP; recreate using Basic, external OAuth or explicit public mode."),
-        AuthModeConfig::OAuth if mount.oauth_config.as_ref().is_some_and(|c| !c.builtin && crate::auth::oauth::validate_https_url(&c.issuer).is_ok()) => (DoctorStatus::Warn,"External OAuth: AS must support resource indicators, PKCE and CIMD or safe registration. RS256 JWT needs iss/sub/aud/exp and required scopes; aud is the exact current /slug/mcp URL. Browser authorization E2E is not established by configuration."),
+        AuthModeConfig::OAuth if mount.oauth_config.as_ref().is_some_and(|c| !c.builtin && crate::auth::oauth::validate_https_url(&c.issuer).is_ok()) => (DoctorStatus::Warn,"External OAuth: AS must support resource indicators, PKCE and CIMD or safe registration. RS256 JWT needs iss/sub/aud/exp and required scopes; aud is the exact current full MCP URL. Browser authorization E2E is not established by configuration."),
         AuthModeConfig::OAuth => (DoctorStatus::Fail,"Built-in/missing/invalid OAuth configuration; recreate with --oidc-issuer https://issuer and required --scope values."),
     };
     checks.push(DoctorCheck {

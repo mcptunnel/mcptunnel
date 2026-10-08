@@ -72,7 +72,7 @@ pub enum ProbeMode {
 impl Default for DaemonConfig {
     fn default() -> Self {
         Self {
-            bind: "127.0.0.1:43123".to_string(),
+            bind: "127.0.0.1:8000".to_string(),
             auto_start: true,
         }
     }
@@ -81,7 +81,7 @@ impl Default for DaemonConfig {
 impl Default for TunnelConfig {
     fn default() -> Self {
         Self {
-            default_mode: TunnelMode::Quick,
+            default_mode: TunnelMode::Local,
             cloudflared_path: "cloudflared".to_string(),
             quick_fail_if_config_yaml_present: true,
             external_origin: None,
@@ -246,9 +246,9 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = Config::default();
-        assert_eq!(config.daemon.bind, "127.0.0.1:43123");
+        assert_eq!(config.daemon.bind, "127.0.0.1:8000");
         assert!(config.daemon.auto_start);
-        assert_eq!(config.tunnel.default_mode, TunnelMode::Quick);
+        assert_eq!(config.tunnel.default_mode, TunnelMode::Local);
         assert_eq!(config.defaults.auth_mode, AuthModeConfig::Basic);
         assert_eq!(config.defaults.session_idle_ttl, Duration::from_secs(900));
         assert_eq!(config.defaults.session_hard_ttl, Duration::from_secs(43200));

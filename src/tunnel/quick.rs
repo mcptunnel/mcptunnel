@@ -39,14 +39,18 @@ impl QuickTunnel {
             .map_err(|e| crate::error::McpTunnelError::CloudflaredMissing(e.to_string()))?;
 
         // Wait up to 30 seconds for the URL
-        let public_url = supervisor
+        let public_url = match supervisor
             .wait_for_url(std::time::Duration::from_secs(30))
             .await
-            .ok_or_else(|| {
-                crate::error::McpTunnelError::TunnelCreateFailed(
-                    "Timed out waiting for quick tunnel URL".to_string(),
-                )
-            })?;
+        {
+            Some(url) => url,
+            None => {
+                supervisor.stop().await;
+                return Err(crate::error::McpTunnelError::TunnelCreateFailed(
+                    "Timed out waiting for quick tunnel URL; check cloudflared/network and retry --public".into(),
+                ));
+            }
+        };
 
         info!(url = %public_url, "Quick tunnel ready");
         self.supervisor = Some(supervisor);

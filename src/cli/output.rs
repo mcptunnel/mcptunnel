@@ -51,10 +51,7 @@ pub fn print_mount_inspect(data: &Value) {
         "  Command:        {}",
         data["command"].as_str().unwrap_or("?")
     );
-    println!(
-        "  MCP URL:        {}",
-        data["public_url"].as_str().unwrap_or("?")
-    );
+    println!("  MCP URL:        {}", data["url"].as_str().unwrap_or("?"));
     println!(
         "  Sessions:       {}",
         data["active_sessions"].as_u64().unwrap_or(0)
@@ -105,14 +102,15 @@ pub fn print_daemon_status(data: &Value) {
     );
     println!("  Bind:           {}", data["bind"].as_str().unwrap_or("?"));
     println!("  Mounts:         {}", data["mounts"].as_u64().unwrap_or(0));
-    println!(
-        "  Tunnel origin:  {}",
-        data["tunnel_origin"].as_str().unwrap_or("not active")
-    );
-    println!(
-        "  Tunnel mode:    {}",
-        data["tunnel_mode"].as_str().unwrap_or("?")
-    );
+    if let Some(listeners) = data["listeners"].as_array() {
+        for listener in listeners {
+            println!(
+                "  Listener:       {} (public: {})",
+                listener["local_origin"].as_str().unwrap_or("?"),
+                listener["public_origin"].as_str().unwrap_or("off")
+            );
+        }
+    }
 }
 
 /// Print human-readable doctor checks.
@@ -137,7 +135,7 @@ pub fn print_mount_created(data: &Value, warnings: &[String]) {
         println!("MCP URL:");
         println!(
             "{}",
-            mount["public_url"]
+            mount["url"]
                 .as_str()
                 .unwrap_or("pending; see mcptunnel tunnel status")
         );

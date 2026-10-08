@@ -34,6 +34,8 @@ pub enum AdminResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MountCreateRequest {
     pub slug: Option<String>,
+    pub port: Option<u16>,
+    pub path: Option<String>,
     pub display_name: Option<String>,
     pub program: String,
     pub args: Vec<String>,
@@ -69,17 +71,15 @@ pub async fn handle_admin_request(state: &Arc<AppState>, request: AdminRequest) 
 }
 
 async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> AdminResponse {
+    let _registration = state.registration.lock().await;
     let tunnel_mode = match req.tunnel_mode.as_deref() {
         Some("managed") => crate::config::TunnelMode::Managed,
         Some("quick") => crate::config::TunnelMode::Quick,
         Some("local") => crate::config::TunnelMode::Local,
-        _ => state.config.tunnel.default_mode,
+        _ => crate::config::TunnelMode::Local,
     };
     if let Err(message) = crate::tunnel::validate_selection(tunnel_mode, req.hostname.as_deref()) {
         return AdminResponse::Error { message, code: 2 };
-    }
-    if tunnel_mode != state.config.tunnel.default_mode {
-        return AdminResponse::Error { message: "all mounts share the daemon transport; configure tunnel.default_mode and restart the daemon".into(), code: 2 };
     }
     let auth_mode = match req.auth_mode.as_deref() {
         Some("public") => AuthModeConfig::Public,
@@ -136,6 +136,8 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
 
     let params = MountCreateParams {
         slug: req.slug,
+        port: req.port.unwrap_or_else(|| state.default_port()),
+        path: req.path,
         display_name: req.display_name,
         command: CommandConfig {
             program: req.program,
@@ -168,6 +170,14 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
         }
     };
 
+    if let Err(error) = state.ensure_listener(record.port).await {
+        let _ = state.mount_registry.remove(&record.slug);
+        let _ = state.prune_listeners().await;
+        return AdminResponse::Error {
+            message: error.to_string(),
+            code: error.exit_code(),
+        };
+    }
     // Run probe if eager
     if probe_mode == crate::config::ProbeMode::Eager {
         let probe = crate::upstream::probe::probe_upstream(
@@ -180,6 +190,7 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
         if !probe.ok {
             // Clean up
             let _ = state.mount_registry.remove(&record.slug);
+            let _ = state.prune_listeners().await;
             return AdminResponse::Error {
                 message: format!("Upstream probe failed: {}", probe.error.unwrap_or_default()),
                 code: crate::error::exit_codes::UPSTREAM_PROBE_FAILED,
@@ -196,10 +207,22 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
             .set_status(&record.slug, MountStatus::Ready);
     }
 
-    state
-        .wait_for_tunnel_ready(std::time::Duration::from_secs(30))
-        .await;
-    let public_url = state.connection_url(&record.slug).await;
+    if tunnel_mode == crate::config::TunnelMode::Quick {
+        if let Err(error) = state.ensure_public(record.port).await {
+            let _ = state.mount_registry.remove(&record.slug);
+            let _ = state.prune_listeners().await;
+            return AdminResponse::Error {
+                message: error.to_string(),
+                code: error.exit_code(),
+            };
+        }
+    }
+    let url = state.connection_url(&record.slug).await;
+    let public_url = if tunnel_mode == crate::config::TunnelMode::Quick {
+        url.clone()
+    } else {
+        None
+    };
 
     // Reveal Basic credentials only to the authenticated local creation command.
     let basic_credentials = record.basic_credentials.as_ref();
@@ -208,11 +231,15 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
         data: serde_json::json!({
             "mount": {
                 "slug": record.slug,
+                "port": record.port,
+                "path": record.path,
                 "display_name": record.display_name,
                 "status": "ready",
                 "auth_mode": auth_mode.to_string(),
                 "tunnel_mode": tunnel_mode.to_string(),
                 "public_url": public_url,
+                "url": url,
+                "local_url": state.local_url(&record.slug),
                 "basic_credentials": basic_credentials,
             }
         }),
@@ -220,6 +247,7 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
 }
 
 async fn handle_mount_delete(state: &Arc<AppState>, slug: &str) -> AdminResponse {
+    let _registration = state.registration.lock().await;
     if let Some(ct) = state.mount_cancellation.write().await.remove(slug) {
         ct.cancel();
     }
@@ -241,13 +269,21 @@ async fn handle_mount_delete(state: &Arc<AppState>, slug: &str) -> AdminResponse
     state.mount_logs.write().await.remove(slug);
 
     match state.mount_registry.remove(slug) {
-        Ok(true) => AdminResponse::Ok {
-            data: serde_json::json!({
-                "deleted": true,
-                "slug": slug,
-                "sessions_terminated": removed.len(),
-            }),
-        },
+        Ok(true) => {
+            if let Err(error) = state.prune_listeners().await {
+                return AdminResponse::Error {
+                    message: error.to_string(),
+                    code: error.exit_code(),
+                };
+            }
+            AdminResponse::Ok {
+                data: serde_json::json!({
+                    "deleted": true,
+                    "slug": slug,
+                    "sessions_terminated": removed.len(),
+                }),
+            }
+        }
         Ok(false) => AdminResponse::Error {
             message: format!("mount '{slug}' not found"),
             code: crate::error::exit_codes::MOUNT_NOT_FOUND,
@@ -273,12 +309,15 @@ async fn handle_mount_list(state: &Arc<AppState>) -> AdminResponse {
 
             serde_json::json!({
                 "slug": m.slug,
+                "port": m.port,
+                "path": m.path,
                 "status": m.status.to_string(),
                 "tunnel": m.tunnel_mode.to_string(),
                 "auth": m.auth_mode.to_string(),
                 "sessions": sessions,
                 "tools": tools,
                 "url": url,
+                "local_url": state.local_url(&m.slug),
             })
         }))
         .await;
@@ -306,20 +345,21 @@ async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminRespons
     };
 
     let sessions = state.session_manager.active_count(slug).await;
-    state
-        .wait_for_tunnel_ready(std::time::Duration::from_secs(30))
-        .await;
     let public_url = state.connection_url(slug).await;
 
     AdminResponse::Ok {
         data: serde_json::json!({
             "slug": mount.slug,
+            "port": mount.port,
+            "path": mount.path,
             "display_name": mount.display_name,
             "status": mount.status.to_string(),
             "auth_mode": mount.auth_mode.to_string(),
             "tunnel_mode": mount.tunnel_mode.to_string(),
             "command": format!("{} {}", mount.command.program, mount.command.args.join(" ")),
-            "public_url": public_url,
+            "url": public_url,
+            "public_url": if mount.tunnel_mode == crate::config::TunnelMode::Quick { public_url.clone() } else { None },
+            "local_url": state.local_url(slug),
             "active_sessions": sessions,
             "created_at": mount.created_at.to_rfc3339(),
             "last_probe": mount.last_probe_result,
@@ -367,27 +407,24 @@ async fn handle_daemon_shutdown(state: &Arc<AppState>) -> AdminResponse {
 
 async fn handle_daemon_status(state: &Arc<AppState>) -> AdminResponse {
     let mounts = state.mount_registry.list().unwrap_or_default();
-    let tunnel_origin = state.tunnel_origin.read().await.clone();
+    let listeners = state.listener_status().await;
 
     AdminResponse::Ok {
         data: serde_json::json!({
             "instance_id": state.daemon_instance_id,
             "bind": state.config.daemon.bind,
             "mounts": mounts.len(),
-            "tunnel_origin": tunnel_origin,
-            "tunnel_mode": state.config.tunnel.default_mode.to_string(),
+            "listeners": listeners,
         }),
     }
 }
 
 async fn handle_tunnel_status(state: &Arc<AppState>) -> AdminResponse {
-    let tunnel_origin = state.tunnel_origin.read().await.clone();
+    let listeners = state.listener_status().await;
 
     AdminResponse::Ok {
         data: serde_json::json!({
-            "mode": state.config.tunnel.default_mode.to_string(),
-            "public_origin": tunnel_origin,
-            "status": if tunnel_origin.is_some() { "ready" } else { "not_started" },
+            "listeners": listeners,
         }),
     }
 }
@@ -401,11 +438,11 @@ async fn handle_doctor_run(state: &Arc<AppState>, slug: Option<&str>) -> AdminRe
             .unwrap_or_default();
 
     // Check tunnel
-    let tunnel_origin = state.tunnel_origin.read().await.clone();
+    let tunnel_origins = state.tunnel_origins.read().await.clone();
     checks.push(serde_json::json!({
         "check": "tunnel",
-        "status": "WARN",
-        "detail": if tunnel_origin.is_some() { "Provider announced an origin; public/client connectivity still requires a real connection test" } else { "No public tunnel origin; check cloudflared installation/network or configure independent local hosting" },
+        "status": if tunnel_origins.is_empty() { "PASS" } else { "WARN" },
+        "detail": if tunnel_origins.is_empty() { "Localhost is the default; --public opens a temporary Cloudflare URL" } else { "Provider announced an origin; public/client connectivity still requires a real connection test" },
     }));
 
     // Mount-specific checks
@@ -491,7 +528,7 @@ async fn handle_doctor_run(state: &Arc<AppState>, slug: Option<&str>) -> AdminRe
                 checks.push(serde_json::json!({
                     "check": "auth_public",
                     "status": "WARN",
-                    "detail": "This endpoint is publicly reachable with no authentication.",
+                    "detail": "Anyone who can reach this endpoint can invoke its tools without authentication.",
                 }));
             }
         } else {

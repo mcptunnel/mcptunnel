@@ -9,13 +9,9 @@ use crate::daemon::state::AppState;
 /// GET /healthz — basic daemon and tunnel health.
 pub async fn healthz(State(state): State<Arc<AppState>>) -> (StatusCode, Json<serde_json::Value>) {
     let mounts = state.mount_registry.list().unwrap_or_default();
-    let tunnel_origin = state.tunnel_origin.read().await.clone();
+    let tunnel_origin = state.tunnel_origins.read().await.clone();
 
-    let status = if tunnel_origin.is_some() {
-        "ok"
-    } else {
-        "degraded"
-    };
+    let status = "ok";
 
     (
         StatusCode::OK,

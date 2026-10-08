@@ -25,8 +25,14 @@ pub async fn execute(cli: Cli) -> i32 {
             eprintln!("Try 'mcptunnel --help' for more information.");
             return exit_codes::CLI_USAGE;
         }
-        let (program, args) = cli.args.split_first().unwrap();
-        return handle_run_bare(&config, program, args).await;
+        return handle_run(
+            &config,
+            RunArgs {
+                options: cli.run,
+                command: cli.args,
+            },
+        )
+        .await;
     }
 
     match cli.command.unwrap() {
@@ -42,31 +48,6 @@ pub async fn execute(cli: Cli) -> i32 {
     }
 }
 
-/// Handle bare command: `mcptunnel -- <command...>`
-async fn handle_run_bare(config: &Config, program: &str, args: &[String]) -> i32 {
-    let run_args = RunArgs {
-        slug: None,
-        name: None,
-        cwd: None,
-        env: vec![],
-        tunnel: None,
-        hostname: None,
-        auth: None,
-        scope: vec![],
-        oidc_issuer: None,
-        allow_tool: vec![],
-        deny_tool: vec![],
-        hide_resources: false,
-        hide_prompts: false,
-        probe: None,
-        json: false,
-        command: std::iter::once(program.to_string())
-            .chain(args.iter().cloned())
-            .collect(),
-    };
-    handle_run(config, run_args).await
-}
-
 /// Handle `run` command.
 async fn handle_run(config: &Config, args: RunArgs) -> i32 {
     if args.command.is_empty() {
@@ -75,6 +56,7 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
     }
 
     let (program, cmd_args) = args.command.split_first().unwrap();
+    let args = args.options;
     let is_json = args.json;
 
     // Parse env vars
@@ -89,6 +71,8 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
 
     let request = AdminRequest::MountCreate(Box::new(MountCreateRequest {
         slug: args.slug,
+        port: args.port,
+        path: args.path,
         display_name: args.name,
         program: program.clone(),
         args: cmd_args.to_vec(),
@@ -97,7 +81,10 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
                 .ok()
                 .map(|path| path.to_string_lossy().into_owned())
         }),
-        tunnel_mode: args.tunnel,
+        tunnel_mode: Some(
+            args.tunnel
+                .unwrap_or_else(|| if args.public { "quick" } else { "local" }.into()),
+        ),
         hostname: args.hostname,
         auth_mode: args.auth,
         oidc_issuer: args.oidc_issuer,
@@ -121,7 +108,7 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
                 let mut warnings = Vec::new();
                 if data["mount"]["auth_mode"] == "public" {
                     warnings.push(
-                        "No authentication. This endpoint is publicly reachable.".to_string(),
+                        "No authentication. Anyone who can reach this endpoint can invoke its tools.".to_string(),
                     );
                 }
                 if data["mount"]["tunnel_mode"] == "quick" {
@@ -487,13 +474,20 @@ async fn handle_tunnel(config: &Config, command: TunnelCommand) -> i32 {
                             "{}",
                             serde_json::to_string_pretty(&data).unwrap_or_default()
                         );
-                    } else {
-                        println!("Tunnel mode:   {}", data["mode"].as_str().unwrap_or("?"));
-                        println!("Status:        {}", data["status"].as_str().unwrap_or("?"));
-                        println!(
-                            "Public origin: {}",
-                            data["public_origin"].as_str().unwrap_or("none")
-                        );
+                    } else if let Some(listeners) = data["listeners"].as_array() {
+                        if listeners.is_empty() {
+                            println!("No listeners; register an MCP server first.");
+                        }
+                        for listener in listeners {
+                            println!(
+                                "Port {}: {} — {}",
+                                listener["port"],
+                                listener["public_status"].as_str().unwrap_or("?"),
+                                listener["public_origin"]
+                                    .as_str()
+                                    .unwrap_or("localhost only")
+                            );
+                        }
                     }
                     exit_codes::SUCCESS
                 }

@@ -38,11 +38,13 @@ try {
     assert(Date.now() < deadline, 'Daemon never became ready');
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  const command = !npx ? [process.execPath, upstream, directory] : process.platform === 'win32' ? ['cmd', '/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-filesystem@2026.8.31', directory] : ['npx', '-y', '@modelcontextprotocol/server-filesystem@2026.8.31', directory];
-  const created = JSON.parse(cli(['run', '--slug', 'files', '--tunnel', quick ? 'quick' : 'local', '--probe', 'eager', '--allow-tool', 'read_text_file', '--allow-tool', 'list_directory', '--json', '--', ...command]));
+  const command = !npx ? [process.execPath, upstream, directory] : ['npx', '-y', '@modelcontextprotocol/server-filesystem@2026.8.31', directory];
+  const created = JSON.parse(cli([...(quick ? ['--public'] : []), '--path', '/filesystem', '--probe', 'eager', '--allow-tool', 'read_text_file', '--allow-tool', 'list_directory', '--json', '--', ...command]));
   const { username, password } = created.mount.basic_credentials;
-  const url = created.mount.public_url;
-  if (quick) assert.match(url, /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/files\/mcp$/);
+  const url = created.mount.url;
+  if (npx) assert.equal(created.mount.slug, 'filesystem');
+  if (quick) assert.match(url, /^https:\/\/[a-z0-9-]+\.trycloudflare\.com\/filesystem$/);
+  else { assert.equal(url, 'http://localhost:' + port + '/filesystem'); assert.equal(created.mount.public_url, null); }
   if (quick) {
     // A provider URL can precede DNS/edge readiness. Wait for a real health response.
     const deadline = Date.now() + 60000;
@@ -73,7 +75,7 @@ try {
   assert(!fs.existsSync(path.join(directory, 'blocked.txt')));
   const unauthenticated = await fetch(url, { method: 'POST', headers: { Accept: headers.Accept, 'Content-Type': headers['Content-Type'] }, body: '{}' });
   assert.equal(unauthenticated.status, 401);
-  cli(['stop', 'files']);
+  cli(['stop', created.mount.slug]);
   console.log('Real Filesystem MCP 2026.8.31 PASS (' + (quick ? 'public Quick HTTPS' : 'local HTTP') + '): Basic auth, modern stateless discovery, read/list, denied write');
 } finally {
   spawnSync(binary, ['daemon', 'stop', '--force'], { env, windowsHide: true, stdio: 'ignore', timeout: 10000 });

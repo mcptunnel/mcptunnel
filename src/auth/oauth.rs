@@ -361,7 +361,10 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bind = listener.local_addr().unwrap().to_string();
         let base = format!("http://{bind}");
-        let resource = format!("{base}/oauth/mcp");
+        let resource = format!(
+            "http://localhost:{}/oauth/mcp",
+            listener.local_addr().unwrap().port()
+        );
         let mut config = Config::default();
         config.daemon.bind = bind;
         config.tunnel.default_mode = TunnelMode::Local;
@@ -370,6 +373,8 @@ mod tests {
         let registry = MountRegistry::new(Arc::new(StdMutex::new(conn)));
         registry
             .create(MountCreateParams {
+                port: listener.local_addr().unwrap().port(),
+                path: Some("/oauth/mcp".into()),
                 slug: Some("oauth".into()),
                 display_name: None,
                 command: CommandConfig {

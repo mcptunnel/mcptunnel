@@ -1,8 +1,8 @@
 [package]
 name = "mcptunnel"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2021"
-description = "A local MCP gateway that bridges stdio MCP servers to public HTTPS endpoints via Cloudflare Tunnel"
+description = "A local MCP gateway that bridges stdio MCP servers to localhost or temporary public HTTPS via Cloudflare Tunnel"
 license = "MIT"
 rust-version = "1.88"
 repository = "https://github.com/mcptunnel/mcptunnel"

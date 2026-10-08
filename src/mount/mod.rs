@@ -1,4 +1,5 @@
 pub mod db;
+pub mod endpoint;
 pub mod slug;
 pub mod types;
 
@@ -28,6 +29,29 @@ impl MountRegistry {
             .lock()
             .map_err(|e| McpTunnelError::Other(e.to_string()))?;
 
+        if params.port == 0 {
+            return Err(McpTunnelError::CliUsage(
+                "--port must be between 1 and 65535".into(),
+            ));
+        }
+        let name = params
+            .slug
+            .clone()
+            .unwrap_or_else(|| endpoint::infer_name(&params.command));
+        let mut path = params.path.clone().unwrap_or_else(|| format!("/{name}"));
+        endpoint::validate_path(&path).map_err(McpTunnelError::CliUsage)?;
+        let base_path = path.clone();
+        let mut suffix = 2;
+        while db::endpoint_exists(&conn, params.port, &path)? {
+            if params.path.is_some() {
+                return Err(McpTunnelError::CliUsage(format!(
+                    "path '{path}' is already registered on port {}; choose --path or --port",
+                    params.port
+                )));
+            }
+            path = format!("{base_path}-{suffix}");
+            suffix += 1;
+        }
         let mount_slug = match params.slug {
             Some(s) => {
                 slug::validate_slug(&s).map_err(McpTunnelError::CliUsage)?;
@@ -39,11 +63,11 @@ impl MountRegistry {
                 s
             }
             None => {
-                let mut generated = slug::generate_slug();
-                let mut attempts = 0;
-                while db::slug_exists(&conn, &generated)? && attempts < 10 {
-                    generated = slug::generate_slug();
-                    attempts += 1;
+                let mut generated = name.clone();
+                let mut suffix = 2;
+                while db::slug_exists(&conn, &generated)? {
+                    generated = format!("{name}-{suffix}");
+                    suffix += 1;
                 }
                 generated
             }
@@ -74,6 +98,8 @@ impl MountRegistry {
         let record = MountRecord {
             id: uuid::Uuid::new_v4(),
             slug: mount_slug,
+            port: params.port,
+            path,
             display_name,
             command: params.command,
             cwd: params.cwd,

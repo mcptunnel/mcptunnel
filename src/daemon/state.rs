@@ -14,7 +14,10 @@ pub struct AppState {
     pub config: Config,
     pub mount_registry: MountRegistry,
     pub session_manager: SessionManager,
-    pub tunnel_origin: RwLock<Option<String>>,
+    pub tunnel_origins: RwLock<HashMap<u16, String>>,
+    pub(crate) listeners:
+        tokio::sync::Mutex<std::collections::BTreeMap<u16, super::listeners::PortRuntime>>,
+    pub(crate) registration: tokio::sync::Mutex<()>,
     pub daemon_instance_id: String,
     pub upstream_children: RwLock<HashMap<String, Arc<UpstreamChild>>>,
     pub request_permits: Arc<tokio::sync::Semaphore>,
@@ -38,7 +41,9 @@ impl AppState {
             config,
             mount_registry,
             session_manager: SessionManager::new(session_config),
-            tunnel_origin: RwLock::new(None),
+            tunnel_origins: RwLock::new(HashMap::new()),
+            listeners: tokio::sync::Mutex::new(std::collections::BTreeMap::new()),
+            registration: tokio::sync::Mutex::new(()),
             daemon_instance_id: uuid::Uuid::new_v4().to_string(),
             upstream_children: RwLock::new(HashMap::new()),
             request_permits: Arc::new(tokio::sync::Semaphore::new(64)),
@@ -51,22 +56,32 @@ impl AppState {
         }
     }
 
-    /// Set the tunnel origin URL.
-    pub async fn set_tunnel_origin(&self, origin: Option<String>) {
-        let mut o = self.tunnel_origin.write().await;
-        *o = origin;
+    pub fn default_port(&self) -> u16 {
+        self.config
+            .daemon
+            .bind
+            .parse::<std::net::SocketAddr>()
+            .map(|a| a.port())
+            .unwrap_or(8000)
     }
 
-    /// Wait until the quick-tunnel origin is populated, up to `timeout`.
-    /// Returns immediately if tunnel mode is not Quick or if origin is already set.
-    pub async fn wait_for_tunnel_ready(&self, timeout: std::time::Duration) {
-        if self.config.tunnel.default_mode != crate::config::TunnelMode::Quick {
-            return;
+    pub async fn set_tunnel_origin(&self, port: u16, origin: Option<String>) {
+        let mut origins = self.tunnel_origins.write().await;
+        if let Some(origin) = origin {
+            origins.insert(port, origin);
+        } else {
+            origins.remove(&port);
         }
+    }
+
+    pub async fn wait_for_tunnel_ready(&self, port: u16, timeout: std::time::Duration) -> bool {
         let deadline = tokio::time::Instant::now() + timeout;
-        while tokio::time::Instant::now() < deadline {
-            if self.tunnel_origin.read().await.is_some() {
-                return;
+        loop {
+            if self.tunnel_origins.read().await.contains_key(&port) {
+                return true;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return false;
             }
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         }
@@ -74,27 +89,50 @@ impl AppState {
 
     /// Get the public MCP URL for a mount.
     pub async fn public_url(&self, slug: &str) -> String {
-        let origin = self.public_origin().await;
-        format!("{origin}/{slug}/mcp")
+        self.connection_url(slug)
+            .await
+            .or_else(|| self.local_url(slug))
+            .unwrap_or_default()
     }
 
     /// No public connection URL is claimed while an ephemeral provider is unavailable.
     pub async fn connection_url(&self, slug: &str) -> Option<String> {
-        if self.config.tunnel.default_mode == crate::config::TunnelMode::Quick
-            && self.tunnel_origin.read().await.is_none()
-        {
-            return None;
-        }
-        Some(self.public_url(slug).await)
+        let mount = self.mount_registry.get(slug).ok().flatten()?;
+        let origin = self.mount_origin(&mount).await?;
+        Some(format!("{origin}{}", mount.path))
     }
 
-    pub async fn public_origin(&self) -> String {
-        self.tunnel_origin
-            .read()
+    pub fn local_url(&self, slug: &str) -> Option<String> {
+        let mount = self.mount_registry.get(slug).ok().flatten()?;
+        Some(format!("http://localhost:{}{}", mount.port, mount.path))
+    }
+
+    pub async fn mount_origin(&self, mount: &crate::mount::types::MountRecord) -> Option<String> {
+        match mount.tunnel_mode {
+            crate::config::TunnelMode::Quick => {
+                self.tunnel_origins.read().await.get(&mount.port).cloned()
+            }
+            crate::config::TunnelMode::Local => Some(
+                self.config
+                    .tunnel
+                    .external_origin
+                    .clone()
+                    .filter(|_| mount.port == self.default_port())
+                    .unwrap_or_else(|| format!("http://localhost:{}", mount.port)),
+            ),
+            crate::config::TunnelMode::Managed => None,
+        }
+    }
+
+    pub async fn metadata_url(&self, mount: &crate::mount::types::MountRecord) -> String {
+        let origin = self
+            .mount_origin(mount)
             .await
-            .clone()
-            .or_else(|| self.config.tunnel.external_origin.clone())
-            .unwrap_or_else(|| format!("http://{}", self.config.daemon.bind))
+            .unwrap_or_else(|| format!("http://localhost:{}", mount.port));
+        format!(
+            "{origin}/.well-known/oauth-protected-resource{}",
+            mount.path
+        )
     }
 
     /// Append a log line for a mount (ring buffer, max 1000 lines).
@@ -150,19 +188,21 @@ mod tests {
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(150)).await;
             state2
-                .set_tunnel_origin(Some("https://example.trycloudflare.com".to_string()))
+                .set_tunnel_origin(8000, Some("https://example.trycloudflare.com".to_string()))
                 .await;
         });
 
         let start = tokio::time::Instant::now();
-        state.wait_for_tunnel_ready(Duration::from_secs(2)).await;
+        state
+            .wait_for_tunnel_ready(8000, Duration::from_secs(2))
+            .await;
         let elapsed = start.elapsed();
 
         assert!(
             elapsed < Duration::from_millis(600),
             "expected <600ms, got {elapsed:?}"
         );
-        assert!(state.tunnel_origin.read().await.is_some());
+        assert!(state.tunnel_origins.read().await.contains_key(&8000));
     }
 
     #[tokio::test]
@@ -171,7 +211,7 @@ mod tests {
 
         let start = tokio::time::Instant::now();
         state
-            .wait_for_tunnel_ready(Duration::from_millis(450))
+            .wait_for_tunnel_ready(8000, Duration::from_millis(450))
             .await;
         let elapsed = start.elapsed();
 
@@ -183,33 +223,20 @@ mod tests {
             elapsed < Duration::from_millis(1000),
             "expected <1000ms, got {elapsed:?}"
         );
-        assert!(state.tunnel_origin.read().await.is_none());
+        assert!(state.tunnel_origins.read().await.is_empty());
     }
 
     #[tokio::test]
     async fn wait_hot_path_returns_immediately() {
         let state = test_state(TunnelMode::Quick);
         state
-            .set_tunnel_origin(Some("https://ready.example.com".to_string()))
+            .set_tunnel_origin(8000, Some("https://ready.example.com".to_string()))
             .await;
 
         let start = tokio::time::Instant::now();
-        state.wait_for_tunnel_ready(Duration::from_secs(5)).await;
-        let elapsed = start.elapsed();
-
-        assert!(
-            elapsed < Duration::from_millis(50),
-            "expected <50ms, got {elapsed:?}"
-        );
-    }
-
-    #[tokio::test]
-    async fn wait_managed_mode_bypasses() {
-        let state = test_state(TunnelMode::Managed);
-        // tunnel_origin is None, but Managed mode should skip the wait entirely
-
-        let start = tokio::time::Instant::now();
-        state.wait_for_tunnel_ready(Duration::from_secs(10)).await;
+        state
+            .wait_for_tunnel_ready(8000, Duration::from_secs(5))
+            .await;
         let elapsed = start.elapsed();
 
         assert!(

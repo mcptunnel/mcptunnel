@@ -1,6 +1,6 @@
 # Client compatibility — 2026-10-08
 
-mcptunnel 0.2.2 bridges current stateless HTTP requests to real legacy stdio servers. This has passed automated gateway tests. **No listed AI client was tested end to end.** No client account, API credential, external authorization server or public tunnel was configured during these tests.
+mcptunnel bridges current stateless HTTP requests to real legacy stdio servers. This has passed automated gateway tests. **No listed AI client was tested end to end.** No listed client account, API credential or external authorization server was configured. Separate real Filesystem/Quick HTTPS verification is recorded below.
 
 ## Evidence levels and every combination
 
@@ -42,7 +42,7 @@ Plan, organization and client version restrictions can change. Record the exact 
 
 ## Copy/paste connection configurations
 
-First create a mount using [README quick start](../README.md). Replace `https://RANDOM.trycloudflare.com/demo/mcp` with the full URL printed by creation. Use the **header value**, such as `Basic BASE64_CREDENTIALS`, without the `Authorization:` label. These templates follow documented client interfaces but have not been executed against accounts.
+First create a mount using [README quick start](../README.md). Use the printed localhost URL for local clients, or run with `--public` for a remote service. Replace `https://RANDOM.trycloudflare.com/filesystem` with the full URL printed by creation. Use the **header value**, such as `Basic BASE64_CREDENTIALS`, without the `Authorization:` label. These templates follow documented client interfaces but have not been executed against accounts.
 
 ### Codex
 
@@ -50,7 +50,7 @@ Add to your user or trusted project `config.toml`. Supply `MCPTUNNEL_AUTHORIZATI
 
 ```toml
 [mcp_servers.demo]
-url = "https://RANDOM.trycloudflare.com/demo/mcp"
+url = "https://RANDOM.trycloudflare.com/filesystem"
 env_http_headers = { Authorization = "MCPTUNNEL_AUTHORIZATION" }
 ```
 
@@ -59,7 +59,7 @@ For an external OAuth mount, omit the fixed header and use the client's document
 ### Claude Code
 
 ```sh
-claude mcp add --transport http demo https://RANDOM.trycloudflare.com/demo/mcp --header "Authorization: Basic BASE64_CREDENTIALS"
+claude mcp add --transport http demo https://RANDOM.trycloudflare.com/filesystem --header "Authorization: Basic BASE64_CREDENTIALS"
 ```
 
 For external OAuth, add the HTTP URL without a fixed Authorization header, then use `/mcp` to authenticate. A fixed invalid header must be corrected rather than assumed to trigger OAuth. [CLI reference](https://code.claude.com/docs/en/mcp).
@@ -72,7 +72,7 @@ Save in `.cursor/mcp.json`. Set the environment variable before starting Cursor.
 {
   "mcpServers": {
     "demo": {
-      "url": "https://RANDOM.trycloudflare.com/demo/mcp",
+      "url": "https://RANDOM.trycloudflare.com/filesystem",
       "headers": { "Authorization": "${env:MCPTUNNEL_AUTHORIZATION}" }
     }
   }
@@ -88,7 +88,7 @@ Save in `.vscode/mcp.json`. The input asks privately for the full header value. 
   "servers": {
     "demo": {
       "type": "http",
-      "url": "https://RANDOM.trycloudflare.com/demo/mcp",
+      "url": "https://RANDOM.trycloudflare.com/filesystem",
       "headers": { "Authorization": "${input:mcptunnelAuthorization}" }
     }
   },
@@ -113,7 +113,7 @@ For the current **Agents API**, configure the nested HTTP transport in the MCP t
   "server_label": "demo",
   "transport": {
     "type": "http",
-    "server_url": "https://RANDOM.trycloudflare.com/demo/mcp",
+    "server_url": "https://RANDOM.trycloudflare.com/filesystem",
     "headers": { "Authorization": "Basic BASE64_CREDENTIALS" }
   },
   "required": true
@@ -154,7 +154,7 @@ For an existing `demo` fixture mount, save this as `request.json`:
 ```
 
 ```sh
-curl --no-buffer "https://RANDOM.trycloudflare.com/demo/mcp" \
+curl --no-buffer "https://RANDOM.trycloudflare.com/filesystem" \
   -H "Authorization: Basic BASE64_CREDENTIALS" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \

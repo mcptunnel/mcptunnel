@@ -1,14 +1,14 @@
 pub mod admin_api;
 pub mod ipc;
+pub mod listeners;
 pub mod state;
 
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::config::Config;
-use crate::gateway;
 use crate::mount::{db, MountRegistry};
 use crate::session::types::SessionConfig;
 use state::AppState;
@@ -66,7 +66,7 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
     // Initialize database
     let db_path = crate::config::db_path();
     let conn = Connection::open(&db_path)?;
-    db::init_db(&conn)?;
+    db::init_db_at_port(&conn, bind.port())?;
     let db = Arc::new(Mutex::new(conn));
 
     let mount_registry = MountRegistry::new(db.clone());
@@ -80,7 +80,6 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
     let app_state = AppState::new(config.clone(), mount_registry, session_config);
     let state = Arc::new(app_state);
     // Bind both endpoints before creating background tasks; startup failures leave no workers.
-    let http_listener = tokio::net::TcpListener::bind(&config.daemon.bind).await?;
     let mut listener = ipc::Listener::bind()?;
 
     // Start session eviction task
@@ -170,66 +169,41 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
         while clients.join_next().await.is_some() {}
     });
 
-    // Auto-start tunnel
-    let tunnel_state = state.clone();
-    let tunnel_config = config.clone();
-    let tunnel_task = tokio::spawn(async move {
-        info!(mode = %tunnel_config.tunnel.default_mode, "Starting tunnel");
-        match tunnel_config.tunnel.default_mode {
-            crate::config::TunnelMode::Quick => {
-                let mut tunnel = crate::tunnel::quick::QuickTunnel::new(
-                    &tunnel_config.tunnel.cloudflared_path,
-                    &tunnel_config.daemon.bind,
-                );
-                loop {
-                    tunnel_state.set_tunnel_origin(None).await;
-                    let started = tokio::select! { _ = tunnel_state.cancellation.cancelled() => break, started = tunnel.start() => started };
-                    match started {
-                        Ok(url) => {
-                            tunnel_state.set_tunnel_origin(Some(url)).await;
-                        }
-                        Err(e) => {
-                            warn!(error = %e, "Quick tunnel unavailable; retrying in 5s");
-                        }
-                    }
-                    loop {
-                        tokio::select! {
-                            _ = tunnel_state.cancellation.cancelled() => { tunnel.stop().await; return; },
-                            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {},
-                        }
-                        if tunnel.status().status != crate::tunnel::TunnelState::Ready {
-                            break;
-                        }
-                    }
+    // Restore saved ports/paths without starting a provider for local-only ports.
+    let restore_state = state.clone();
+    let restore_task = tokio::spawn(async move {
+        let _registration = restore_state.registration.lock().await;
+        let mounts = restore_state.mount_registry.list().unwrap_or_default();
+        for mount in mounts {
+            if restore_state.cancellation.is_cancelled() {
+                break;
+            }
+            let restored = async {
+                restore_state.ensure_listener(mount.port).await?;
+                if mount.tunnel_mode == crate::config::TunnelMode::Quick {
+                    restore_state.ensure_public(mount.port).await?;
                 }
-                tunnel.stop().await;
+                Ok::<_, crate::error::McpTunnelError>(())
             }
-            crate::config::TunnelMode::Managed => {
-                unreachable!("managed selection was rejected before startup")
-            }
-            crate::config::TunnelMode::Local => {
-                info!("Local mode: configure your own reverse proxy if needed")
+            .await;
+            if let Err(error) = restored {
+                error!(mount = %mount.slug, %error, "Cannot restore mount listener/provider");
+                let _ = restore_state
+                    .mount_registry
+                    .set_status(&mount.slug, crate::mount::types::MountStatus::Degraded);
+            } else {
+                let _ = restore_state
+                    .mount_registry
+                    .set_status(&mount.slug, crate::mount::types::MountStatus::Ready);
             }
         }
     });
 
-    // Build HTTP router
-    let router = gateway::build_router(state.clone());
+    tokio::select! { _ = state.shutdown.notified() => {}, _ = tokio::signal::ctrl_c() => {} }
+    state.cancellation.cancel();
+    info!("Shutdown signal received, stopping daemon...");
 
-    // Start HTTP server
-    info!(bind = %config.daemon.bind, "HTTP gateway listening");
-
-    // Run HTTP server until shutdown signal
-    let shutdown_state = state.clone();
-    let server_result = axum::serve(http_listener, router)
-        .with_graceful_shutdown(async move {
-            tokio::select! { _ = shutdown_state.shutdown.notified() => {}, _ = tokio::signal::ctrl_c() => {} }
-            shutdown_state.cancellation.cancel();
-            info!("Shutdown signal received, stopping daemon...");
-        })
-        .await;
-
-    for mut task in [admin_task, eviction_task, tunnel_task] {
+    for mut task in [admin_task, eviction_task, restore_task] {
         if tokio::time::timeout(std::time::Duration::from_secs(3), &mut task)
             .await
             .is_err()
@@ -238,6 +212,7 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
             let _ = task.await;
         }
     }
+    state.stop_listeners().await;
     let children = std::mem::take(&mut *state.upstream_children.write().await);
     for (_, child) in children {
         child.cancel();
@@ -250,6 +225,5 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
     let _ = std::fs::remove_file(&socket_path);
     info!("Daemon stopped.");
 
-    server_result?;
     Ok(())
 }

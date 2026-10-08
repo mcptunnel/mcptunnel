@@ -1,5 +1,14 @@
 # Protocol and security audit
 
+## 0.3.0 routing audit
+
+| Concern | Implementation | Verification |
+|---|---|---|
+| Local mounts exposed when sharing a tunnel listener | Quick uses a separate filtered ingress per local port; visibility filtering precedes route/metadata dispatch | Raw HTTP with public and forged localhost/IP Host values; local MCP and configured local OAuth metadata return 404 through ingress |
+| Multiple ports and exact paths | Persisted unique `(port, path)`, one listener per port; inferred collision suffixes and explicit conflict errors | Real CLI/stdio calls on shared and separate ports, same path on separate ports, duplicate path rejection |
+| Restart/failed registration leaks | Restore assigned routes; roll back port/probe/provider failures; close unused listeners and reap last-public provider | Provider PID events, occupied ports, missing upstream/provider, restart and deletion checks |
+| Public URL/auth identity ambiguity | Separate `url`, `local_url`, nullable `public_url`; PRM and JWT resource use the exact selected URL | Multi-segment local/public OAuth metadata and challenges; existing RS256 audience/session isolation regression |
+
 Baseline: commit `f4515c5`. Audit and research date: 2026-10-08. See [research sources](RESEARCH.md) and [verification report](ENGINEERING_REPORT.md). Severity describes the original finding, not a claim that a corresponding issue remains open.
 
 | Existing behavior | Required behavior | Severity | Affected files | Implementation decision | Coverage |

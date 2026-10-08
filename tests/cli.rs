@@ -69,10 +69,11 @@ fn portable_daemon_ipc_and_fail_closed_configuration() {
         .unwrap();
     assert!(created.status.success());
     let created: serde_json::Value = serde_json::from_slice(&created.stdout).unwrap();
-    assert!(created["mount"]["public_url"]
-        .as_str()
-        .unwrap()
-        .starts_with("http://127.0.0.1:"));
+    assert_eq!(
+        created["mount"]["url"],
+        format!("http://localhost:{}/test", bind.port())
+    );
+    assert!(created["mount"]["public_url"].is_null());
     assert!(created["mount"]["basic_credentials"]["password"].is_string());
     let inspected = command()
         .args(["inspect", "test", "--json"])

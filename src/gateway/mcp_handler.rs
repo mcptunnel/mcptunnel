@@ -43,11 +43,6 @@ pub async fn handle_mcp(
         )
             .into_response();
     }
-    if let Err(response) =
-        crate::gateway::security::validate_boundary(&state, request.headers()).await
-    {
-        return response;
-    }
     let Ok(_global_permit) = state.request_permits.clone().try_acquire_owned() else {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     };

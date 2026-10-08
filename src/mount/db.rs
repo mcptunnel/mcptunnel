@@ -6,6 +6,10 @@ use crate::config::AuthModeConfig;
 
 /// Initialize the database schema.
 pub fn init_db(conn: &Connection) -> SqlResult<()> {
+    init_db_at_port(conn, 8000)
+}
+
+pub fn init_db_at_port(conn: &Connection, legacy_port: u16) -> SqlResult<()> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS mounts (
@@ -69,14 +73,25 @@ pub fn init_db(conn: &Connection) -> SqlResult<()> {
         conn.execute_batch("ALTER TABLE mounts ADD COLUMN basic_credentials_json TEXT;")?;
     }
 
+    if conn.prepare("SELECT port FROM mounts LIMIT 0").is_err() {
+        conn.execute_batch(&format!(
+            "ALTER TABLE mounts ADD COLUMN port INTEGER NOT NULL DEFAULT {legacy_port};"
+        ))?;
+    }
+    if conn.prepare("SELECT path FROM mounts LIMIT 0").is_err() {
+        conn.execute_batch("ALTER TABLE mounts ADD COLUMN path TEXT NOT NULL DEFAULT ''; UPDATE mounts SET path = '/' || slug || '/mcp';")?;
+    }
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_mount_endpoint ON mounts(port, path);",
+    )?;
     Ok(())
 }
 
 /// Insert a mount record.
 pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
     conn.execute(
-        "INSERT INTO mounts (id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+        "INSERT INTO mounts (id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
         params![
             record.id.to_string(),
             record.slug,
@@ -95,6 +110,8 @@ pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
             record.last_probe_result.as_ref().map(|p| serde_json::to_string(p).unwrap_or_default()),
             serde_json::to_string(&record.env_vars).unwrap_or_default(),
             record.basic_credentials.as_ref().map(|c| serde_json::to_string(c).unwrap_or_default()),
+            record.port,
+            record.path,
         ],
     )?;
     Ok(())
@@ -103,7 +120,7 @@ pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
 /// List all mounts.
 pub fn list_mounts(conn: &Connection) -> SqlResult<Vec<MountRecord>> {
     let mut stmt = conn.prepare(
-        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json FROM mounts"
+        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path FROM mounts"
     )?;
 
     let records = stmt
@@ -117,7 +134,7 @@ pub fn list_mounts(conn: &Connection) -> SqlResult<Vec<MountRecord>> {
 /// Get a mount by slug.
 pub fn get_mount_by_slug(conn: &Connection, slug: &str) -> SqlResult<Option<MountRecord>> {
     let mut stmt = conn.prepare(
-        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json FROM mounts WHERE slug = ?1"
+        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path FROM mounts WHERE slug = ?1"
     )?;
 
     let mut rows = stmt.query_map(params![slug], |row| Ok(row_to_mount(row)))?;
@@ -168,6 +185,14 @@ pub fn slug_exists(conn: &Connection, slug: &str) -> SqlResult<bool> {
     Ok(count > 0)
 }
 
+pub fn endpoint_exists(conn: &Connection, port: u16, path: &str) -> SqlResult<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM mounts WHERE port = ?1 AND path = ?2)",
+        params![port, path],
+        |row| row.get(0),
+    )
+}
+
 fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
     let id_str: String = row.get(0).unwrap_or_default();
     let command_json: String = row.get(3).unwrap_or_default();
@@ -187,6 +212,8 @@ fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
     MountRecord {
         id: uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::new_v4()),
         slug: row.get(1).unwrap_or_default(),
+        port: row.get(17).unwrap_or(8000),
+        path: row.get(18).unwrap_or_default(),
         display_name: row.get(2).unwrap_or_default(),
         command: serde_json::from_str(&command_json).unwrap_or(super::types::CommandConfig {
             program: String::new(),
@@ -247,6 +274,8 @@ mod tests {
         MountRecord {
             id: uuid::Uuid::new_v4(),
             slug: slug.to_string(),
+            port: 8000,
+            path: format!("/{slug}"),
             display_name: format!("Test {slug}"),
             command: CommandConfig {
                 program: "echo".to_string(),
@@ -279,6 +308,8 @@ mod tests {
         let fetched = get_mount_by_slug(&conn, "painter").unwrap().unwrap();
         assert_eq!(fetched.slug, "painter");
         assert_eq!(fetched.display_name, "Test painter");
+        assert_eq!(fetched.port, 8000);
+        assert_eq!(fetched.path, "/painter");
 
         let all = list_mounts(&conn).unwrap();
         assert_eq!(all.len(), 1);
@@ -337,5 +368,45 @@ mod tests {
         let fetched = get_mount_by_slug(&conn, "public-test").unwrap().unwrap();
         assert_eq!(fetched.auth_mode, AuthModeConfig::Public);
         assert!(fetched.basic_credentials.is_none());
+    }
+
+    #[test]
+    fn legacy_endpoints_migrate_without_changing_visibility() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE mounts (slug TEXT, tunnel_mode TEXT, basic_credentials_json TEXT); INSERT INTO mounts VALUES ('old-private', 'local', NULL), ('old-public', 'quick', NULL);").unwrap();
+        init_db_at_port(&conn, 43123).unwrap();
+        let routes: Vec<(String, u16, String, String)> = conn
+            .prepare("SELECT slug, port, path, tunnel_mode FROM mounts ORDER BY slug")
+            .unwrap()
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(
+            routes,
+            vec![
+                (
+                    "old-private".into(),
+                    43123,
+                    "/old-private/mcp".into(),
+                    "local".into()
+                ),
+                (
+                    "old-public".into(),
+                    43123,
+                    "/old-public/mcp".into(),
+                    "quick".into()
+                )
+            ]
+        );
+        init_db_at_port(&conn, 8000).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT port FROM mounts LIMIT 1", [], |row| row
+                .get::<_, u16>(0))
+                .unwrap(),
+            43123
+        );
     }
 }

@@ -11,6 +11,8 @@ use crate::policy::types::PolicyConfig;
 pub struct MountRecord {
     pub id: Uuid,
     pub slug: String,
+    pub port: u16,
+    pub path: String,
     pub display_name: String,
     pub command: CommandConfig,
     pub cwd: Option<String>,
@@ -93,6 +95,8 @@ pub struct ProbeResult {
 #[derive(Debug, Clone)]
 pub struct MountCreateParams {
     pub slug: Option<String>,
+    pub port: u16,
+    pub path: Option<String>,
     pub display_name: Option<String>,
     pub command: CommandConfig,
     pub cwd: Option<String>,

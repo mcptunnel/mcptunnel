@@ -1,15 +1,19 @@
 pub mod commands;
 pub mod output;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
-/// mcptunnel — expose local stdio MCP servers as public HTTPS endpoints.
+/// mcptunnel — serve stdio MCP on localhost; add --public for temporary HTTPS.
 #[derive(Parser, Debug)]
 #[command(name = "mcptunnel", version, about, long_about = None)]
 #[command(propagate_version = true)]
+#[command(args_conflicts_with_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
+
+    #[command(flatten)]
+    pub run: RunOptions,
 
     /// Command to run as an MCP server (when no subcommand is given).
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -82,6 +86,27 @@ pub enum Commands {
 
 #[derive(Parser, Debug)]
 pub struct RunArgs {
+    #[command(flatten)]
+    pub options: RunOptions,
+
+    /// Command to run as an MCP server.
+    #[arg(last = true, required = true)]
+    pub command: Vec<String>,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct RunOptions {
+    /// Open a temporary Cloudflare HTTPS URL for this server.
+    #[arg(long, conflicts_with = "tunnel")]
+    pub public: bool,
+
+    /// Local listener port (default: 8000, or daemon.bind in custom config).
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+    pub port: Option<u16>,
+
+    /// Exact MCP endpoint path (default: /<server-name>).
+    #[arg(long)]
+    pub path: Option<String>,
     /// Explicit mount slug.
     #[arg(long)]
     pub slug: Option<String>,
@@ -141,10 +166,6 @@ pub struct RunArgs {
     /// Output as JSON.
     #[arg(long)]
     pub json: bool,
-
-    /// Command to run as an MCP server.
-    #[arg(last = true, required = true)]
-    pub command: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -175,4 +196,74 @@ pub enum TunnelCommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn optional_flags_and_argv_boundary() {
+        let cli = Cli::try_parse_from([
+            "mcptunnel",
+            "--",
+            "npx",
+            "-y",
+            "@playwright/mcp",
+            "--port",
+            "9000",
+        ])
+        .unwrap();
+        assert!(!cli.run.public);
+        assert_eq!(cli.run.port, None);
+        assert_eq!(cli.args, ["npx", "-y", "@playwright/mcp", "--port", "9000"]);
+        let cli = Cli::try_parse_from([
+            "mcptunnel",
+            "--public",
+            "--port",
+            "9001",
+            "--path",
+            "/team/files",
+            "--json",
+            "--",
+            "uvx",
+            "mcp-server-git",
+        ])
+        .unwrap();
+        assert!(cli.run.public);
+        assert_eq!(cli.run.port, Some(9001));
+        assert_eq!(cli.run.path.as_deref(), Some("/team/files"));
+        let cli = Cli::try_parse_from([
+            "mcptunnel",
+            "run",
+            "--public",
+            "--",
+            "npx",
+            "-y",
+            "@playwright/mcp",
+        ])
+        .unwrap();
+        assert!(matches!(cli.command, Some(Commands::Run(args)) if args.options.public));
+        for port in ["0", "65536", "-1"] {
+            assert!(
+                Cli::try_parse_from(["mcptunnel", "--port", port, "--", "node", "server.js"])
+                    .is_err()
+            );
+        }
+        assert!(Cli::try_parse_from([
+            "mcptunnel",
+            "--public",
+            "--tunnel",
+            "local",
+            "--",
+            "node",
+            "server.js"
+        ])
+        .is_err());
+        assert!(matches!(
+            Cli::try_parse_from(["mcptunnel", "list", "--json"])
+                .unwrap()
+                .command,
+            Some(Commands::List { json: true })
+        ));
+    }
 }
