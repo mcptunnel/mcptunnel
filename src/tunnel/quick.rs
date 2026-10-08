@@ -29,7 +29,7 @@ impl QuickTunnel {
         let args = vec![
             "tunnel".to_string(),
             "--config".to_string(),
-            "/dev/null".to_string(),
+            if cfg!(windows) { "NUL" } else { "/dev/null" }.to_string(),
             "--url".to_string(),
             url,
         ];

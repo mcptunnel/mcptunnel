@@ -6,6 +6,7 @@ use std::time::Duration;
 /// Global configuration loaded from `~/.config/mcptunnel/config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct Config {
     pub daemon: DaemonConfig,
     pub tunnel: TunnelConfig,
@@ -25,6 +26,7 @@ pub struct TunnelConfig {
     pub default_mode: TunnelMode,
     pub cloudflared_path: String,
     pub quick_fail_if_config_yaml_present: bool,
+    pub external_origin: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +49,7 @@ pub struct DefaultsConfig {
 pub enum TunnelMode {
     Quick,
     Managed,
+    Local,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,16 +69,6 @@ pub enum ProbeMode {
     Off,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            daemon: DaemonConfig::default(),
-            tunnel: TunnelConfig::default(),
-            defaults: DefaultsConfig::default(),
-        }
-    }
-}
-
 impl Default for DaemonConfig {
     fn default() -> Self {
         Self {
@@ -91,6 +84,7 @@ impl Default for TunnelConfig {
             default_mode: TunnelMode::Quick,
             cloudflared_path: "cloudflared".to_string(),
             quick_fail_if_config_yaml_present: true,
+            external_origin: None,
         }
     }
 }
@@ -133,6 +127,7 @@ impl std::fmt::Display for TunnelMode {
         match self {
             Self::Quick => write!(f, "quick"),
             Self::Managed => write!(f, "managed"),
+            Self::Local => write!(f, "local"),
         }
     }
 }
@@ -163,7 +158,7 @@ mod humantime_serde {
         } else if secs % 60 == 0 {
             format!("{}m", secs / 60)
         } else {
-            format!("{}s", secs)
+            format!("{secs}s")
         };
         serializer.serialize_str(&s)
     }

@@ -1,5 +1,7 @@
+use crate::daemon::ipc::Client as AdminStream;
 use std::io::{BufRead, Write};
-use std::os::unix::net::UnixStream;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 use crate::cli::{Cli, Commands, DaemonCommand, RunArgs, TunnelCommand};
 use crate::config::{load_config, Config};
@@ -22,7 +24,7 @@ pub async fn execute(cli: Cli) -> i32 {
     }
 
     match cli.command.unwrap() {
-        Commands::Run(args) => handle_run(&config, args).await,
+        Commands::Run(args) => handle_run(&config, *args).await,
         Commands::List { json } => handle_list(&config, json).await,
         Commands::Inspect { slug, json } => handle_inspect(&config, &slug, json).await,
         Commands::Logs { slug, follow } => handle_logs(&config, &slug, follow).await,
@@ -74,14 +76,16 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
     let is_public = args.auth.as_deref() == Some("public");
 
     // Parse env vars
-    let env_vars: Vec<(String, String)> = args.env.iter()
+    let env_vars: Vec<(String, String)> = args
+        .env
+        .iter()
         .filter_map(|e| {
             let mut parts = e.splitn(2, '=');
             Some((parts.next()?.to_string(), parts.next()?.to_string()))
         })
         .collect();
 
-    let request = AdminRequest::MountCreate(MountCreateRequest {
+    let request = AdminRequest::MountCreate(Box::new(MountCreateRequest {
         slug: args.slug,
         display_name: args.name,
         program: program.clone(),
@@ -100,20 +104,25 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
         hide_prompts: args.hide_prompts,
         env_vars,
         probe_mode: args.probe,
-    });
+    }));
 
     match send_admin_request(config, &request) {
         Ok(AdminResponse::Ok { data }) => {
             if is_json {
-                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                );
             } else {
                 let mut warnings = Vec::new();
                 if is_public {
-                    warnings.push("No authentication. This endpoint is publicly reachable.".to_string());
+                    warnings.push(
+                        "No authentication. This endpoint is publicly reachable.".to_string(),
+                    );
                 }
                 if !is_managed {
                     warnings.push("Quick Tunnel is for testing/development only.".to_string());
-                    warnings.push("Quick Tunnel does not support SSE; use --tunnel managed for hardened streaming behavior.".to_string());
+                    warnings.push("Quick Tunnel URLs are temporary and SSE is unavailable. Managed provisioning is not implemented.".to_string());
                 }
                 crate::cli::output::print_mount_created(&data, &warnings);
             }
@@ -136,9 +145,13 @@ async fn handle_list(config: &Config, json: bool) -> i32 {
     match send_admin_request(config, &request) {
         Ok(AdminResponse::Ok { data }) => {
             if json {
-                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                );
             } else {
-                let mounts = data["mounts"].as_array()
+                let mounts = data["mounts"]
+                    .as_array()
                     .map(|a| a.to_vec())
                     .unwrap_or_default();
                 crate::cli::output::print_mount_list(&mounts);
@@ -158,11 +171,16 @@ async fn handle_list(config: &Config, json: bool) -> i32 {
 
 /// Handle `inspect` command.
 async fn handle_inspect(config: &Config, slug: &str, json: bool) -> i32 {
-    let request = AdminRequest::MountInspect { slug: slug.to_string() };
+    let request = AdminRequest::MountInspect {
+        slug: slug.to_string(),
+    };
     match send_admin_request(config, &request) {
         Ok(AdminResponse::Ok { data }) => {
             if json {
-                println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&data).unwrap_or_default()
+                );
             } else {
                 crate::cli::output::print_mount_inspect(&data);
             }
@@ -237,13 +255,14 @@ async fn handle_stop(config: &Config, slug: Option<&str>, all: bool) -> i32 {
         // Stop all mounts
         let list_request = AdminRequest::MountList;
         let slugs = match send_admin_request(config, &list_request) {
-            Ok(AdminResponse::Ok { data }) => {
-                data["mounts"].as_array()
-                    .map(|arr| arr.iter()
+            Ok(AdminResponse::Ok { data }) => data["mounts"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
                         .filter_map(|m| m["slug"].as_str().map(String::from))
-                        .collect::<Vec<_>>())
-                    .unwrap_or_default()
-            }
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
             Ok(AdminResponse::Error { message, code }) => {
                 eprintln!("Error: {message}");
                 return code;
@@ -276,7 +295,10 @@ async fn handle_stop(config: &Config, slug: Option<&str>, all: bool) -> i32 {
                 }
             }
         }
-        println!("All {} mount(s) stopped. {total_sessions} session(s) terminated.", slugs.len());
+        println!(
+            "All {} mount(s) stopped. {total_sessions} session(s) terminated.",
+            slugs.len()
+        );
         return exit_codes::SUCCESS;
     }
 
@@ -288,7 +310,9 @@ async fn handle_stop(config: &Config, slug: Option<&str>, all: bool) -> i32 {
         }
     };
 
-    let request = AdminRequest::MountDelete { slug: slug.to_string() };
+    let request = AdminRequest::MountDelete {
+        slug: slug.to_string(),
+    };
     match send_admin_request(config, &request) {
         Ok(AdminResponse::Ok { data }) => {
             let sessions = data["sessions_terminated"].as_u64().unwrap_or(0);
@@ -316,7 +340,9 @@ async fn handle_doctor(config: &Config, slug: Option<&str>, json: bool) -> i32 {
 
         // Try to get daemon-side checks if slug provided
         if let Some(slug) = slug {
-            let request = AdminRequest::DoctorRun { slug: Some(slug.to_string()) };
+            let request = AdminRequest::DoctorRun {
+                slug: Some(slug.to_string()),
+            };
             if let Ok(AdminResponse::Ok { data }) = send_admin_request(config, &request) {
                 if let Some(checks) = data.get("checks") {
                     all_checks["daemon_checks"] = checks.clone();
@@ -324,14 +350,19 @@ async fn handle_doctor(config: &Config, slug: Option<&str>, json: bool) -> i32 {
             }
         }
 
-        println!("{}", serde_json::to_string_pretty(&all_checks).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&all_checks).unwrap_or_default()
+        );
     } else {
         crate::doctor::format_checks_human(&local_checks)
             .lines()
             .for_each(|l| println!("{l}"));
 
         if let Some(slug) = slug {
-            let request = AdminRequest::DoctorRun { slug: Some(slug.to_string()) };
+            let request = AdminRequest::DoctorRun {
+                slug: Some(slug.to_string()),
+            };
             if let Ok(AdminResponse::Ok { data }) = send_admin_request(config, &request) {
                 if let Some(checks) = data["checks"].as_array() {
                     crate::cli::output::print_doctor_checks(checks);
@@ -352,7 +383,10 @@ async fn handle_daemon(config: &Config, command: DaemonCommand) -> i32 {
             match send_admin_request_no_autostart(config, &request) {
                 Ok(AdminResponse::Ok { data }) => {
                     if json {
-                        println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&data).unwrap_or_default()
+                        );
                     } else {
                         crate::cli::output::print_daemon_status(&data);
                     }
@@ -441,11 +475,17 @@ async fn handle_tunnel(config: &Config, command: TunnelCommand) -> i32 {
             match send_admin_request(config, &request) {
                 Ok(AdminResponse::Ok { data }) => {
                     if json {
-                        println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&data).unwrap_or_default()
+                        );
                     } else {
                         println!("Tunnel mode:   {}", data["mode"].as_str().unwrap_or("?"));
                         println!("Status:        {}", data["status"].as_str().unwrap_or("?"));
-                        println!("Public origin: {}", data["public_origin"].as_str().unwrap_or("none"));
+                        println!(
+                            "Public origin: {}",
+                            data["public_origin"].as_str().unwrap_or("none")
+                        );
                     }
                     exit_codes::SUCCESS
                 }
@@ -469,7 +509,7 @@ async fn handle_gc(_config: &Config) -> i32 {
     let socket_path = crate::config::socket_path();
     if socket_path.exists() {
         // Check if daemon is actually running by trying to connect
-        match UnixStream::connect(&socket_path) {
+        match crate::daemon::ipc::connect() {
             Ok(_) => println!("Daemon is running — skipping socket cleanup."),
             Err(_) => {
                 let _ = std::fs::remove_file(&socket_path);
@@ -488,19 +528,25 @@ fn send_admin_request(config: &Config, request: &AdminRequest) -> Result<AdminRe
 }
 
 /// Send an admin request without auto-starting the daemon.
-fn send_admin_request_no_autostart(_config: &Config, request: &AdminRequest) -> Result<AdminResponse, String> {
+fn send_admin_request_no_autostart(
+    _config: &Config,
+    request: &AdminRequest,
+) -> Result<AdminResponse, String> {
     send_admin_request_inner(request, false)
 }
 
-fn send_admin_request_inner(request: &AdminRequest, auto_start: bool) -> Result<AdminResponse, String> {
+fn send_admin_request_inner(
+    request: &AdminRequest,
+    auto_start: bool,
+) -> Result<AdminResponse, String> {
     let socket_path = crate::config::socket_path();
 
-    match UnixStream::connect(&socket_path) {
+    match crate::daemon::ipc::connect() {
         Ok(stream) => send_on_stream(stream, request),
         Err(_) if auto_start => {
             eprintln!("Daemon not running. Auto-starting...");
             auto_start_daemon()?;
-            let stream = UnixStream::connect(&socket_path)
+            let stream = crate::daemon::ipc::connect()
                 .map_err(|e| format!("Cannot connect to daemon after auto-start: {e}"))?;
             send_on_stream(stream, request)
         }
@@ -512,22 +558,28 @@ fn send_admin_request_inner(request: &AdminRequest, auto_start: bool) -> Result<
 }
 
 /// Send a request on an already-connected Unix stream.
-fn send_on_stream(mut stream: UnixStream, request: &AdminRequest) -> Result<AdminResponse, String> {
-    let request_json = serde_json::to_string(request)
-        .map_err(|e| format!("Failed to serialize request: {e}"))?;
+fn send_on_stream(
+    mut stream: AdminStream,
+    request: &AdminRequest,
+) -> Result<AdminResponse, String> {
+    let request_json =
+        serde_json::to_string(request).map_err(|e| format!("Failed to serialize request: {e}"))?;
 
-    stream.write_all(request_json.as_bytes())
+    stream
+        .write_all(request_json.as_bytes())
         .map_err(|e| format!("Failed to send request: {e}"))?;
-    stream.write_all(b"\n")
+    stream
+        .write_all(b"\n")
         .map_err(|e| format!("Failed to send newline: {e}"))?;
 
     let reader = std::io::BufReader::new(&stream);
-    reader.lines().next()
+    reader
+        .lines()
+        .next()
         .ok_or_else(|| "No response from daemon".to_string())?
         .map_err(|e| format!("Failed to read response: {e}"))
         .and_then(|line| {
-            serde_json::from_str(&line)
-                .map_err(|e| format!("Failed to parse response: {e}"))
+            serde_json::from_str(&line).map_err(|e| format!("Failed to parse response: {e}"))
         })
 }
 
@@ -537,15 +589,17 @@ fn auto_start_daemon() -> Result<(), String> {
 
     // Ensure state directory exists
     let state_dir = crate::config::state_dir();
-    std::fs::create_dir_all(&state_dir)
-        .map_err(|e| format!("Failed to create state dir: {e}"))?;
+    std::fs::create_dir_all(&state_dir).map_err(|e| format!("Failed to create state dir: {e}"))?;
 
     // Get the current executable path
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("Failed to get current executable: {e}"))?;
+    let exe =
+        std::env::current_exe().map_err(|e| format!("Failed to get current executable: {e}"))?;
 
     // Spawn daemon as a background process
-    let child = Command::new(&exe)
+    let mut command = Command::new(&exe);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    let child = command
         .args(["daemon", "start"])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

@@ -2,8 +2,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 /// Initialize structured logging with tracing.
 pub fn init_logging(level: &str) {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
 
     fmt()
         .with_env_filter(filter)
@@ -29,7 +28,7 @@ mod tests {
     fn test_hash_session_id() {
         let hash = hash_session_id("test-session-123");
         assert_eq!(hash.len(), 16); // 8 bytes = 16 hex chars
-        // Deterministic
+                                    // Deterministic
         assert_eq!(hash, hash_session_id("test-session-123"));
         // Different input = different hash
         assert_ne!(hash, hash_session_id("other-session"));

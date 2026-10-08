@@ -3,11 +3,10 @@ use std::sync::Arc;
 use tokio::sync::{Notify, RwLock};
 
 use crate::auth::oauth::JwksCache;
-use crate::auth::oauth_server::OAuthServerState;
 use crate::config::Config;
 use crate::mount::MountRegistry;
-use crate::session::SessionManager;
 use crate::session::types::SessionConfig;
+use crate::session::SessionManager;
 use crate::upstream::child::UpstreamChild;
 
 /// SSE sender for forwarding notifications to connected clients.
@@ -20,10 +19,12 @@ pub struct AppState {
     pub session_manager: SessionManager,
     pub tunnel_origin: RwLock<Option<String>>,
     pub daemon_instance_id: String,
-    pub upstream_children: RwLock<HashMap<String, UpstreamChild>>,
+    pub upstream_children: RwLock<HashMap<String, Arc<UpstreamChild>>>,
+    pub request_permits: Arc<tokio::sync::Semaphore>,
+    pub mount_permits: RwLock<HashMap<String, Arc<tokio::sync::Semaphore>>>,
+    pub mount_cancellation: RwLock<HashMap<String, tokio_util::sync::CancellationToken>>,
+    pub cancellation: tokio_util::sync::CancellationToken,
     pub jwks_cache: Arc<JwksCache>,
-    /// Built-in OAuth Authorization Server state (None if not used).
-    pub oauth_server: Option<Arc<OAuthServerState>>,
     /// Per-mount log ring buffers: mount_slug -> Vec<log_line>.
     pub mount_logs: RwLock<HashMap<String, Vec<String>>>,
     /// SSE senders per session ID — for forwarding server notifications to SSE clients.
@@ -45,21 +46,15 @@ impl AppState {
             tunnel_origin: RwLock::new(None),
             daemon_instance_id: uuid::Uuid::new_v4().to_string(),
             upstream_children: RwLock::new(HashMap::new()),
+            request_permits: Arc::new(tokio::sync::Semaphore::new(64)),
+            mount_permits: RwLock::new(HashMap::new()),
+            mount_cancellation: RwLock::new(HashMap::new()),
+            cancellation: tokio_util::sync::CancellationToken::new(),
             jwks_cache: Arc::new(JwksCache::new()),
-            oauth_server: None,
             mount_logs: RwLock::new(HashMap::new()),
             sse_senders: RwLock::new(HashMap::new()),
             shutdown: Notify::new(),
         }
-    }
-
-    /// Initialize the built-in OAuth server. Call once at daemon startup.
-    pub fn init_oauth_server(&mut self) -> Result<(), String> {
-        if self.oauth_server.is_none() {
-            let server_state = OAuthServerState::new()?;
-            self.oauth_server = Some(Arc::new(server_state));
-        }
-        Ok(())
     }
 
     /// Set the tunnel origin URL.
@@ -85,9 +80,17 @@ impl AppState {
 
     /// Get the public MCP URL for a mount.
     pub async fn public_url(&self, slug: &str) -> String {
-        let origin = self.tunnel_origin.read().await.clone()
-            .unwrap_or_else(|| format!("http://{}", self.config.daemon.bind));
-        format!("{}/{}/mcp", origin, slug)
+        let origin = self.public_origin().await;
+        format!("{origin}/{slug}/mcp")
+    }
+
+    pub async fn public_origin(&self) -> String {
+        self.tunnel_origin
+            .read()
+            .await
+            .clone()
+            .or_else(|| self.config.tunnel.external_origin.clone())
+            .unwrap_or_else(|| format!("http://{}", self.config.daemon.bind))
     }
 
     /// Append a log line for a mount (ring buffer, max 1000 lines).
@@ -116,7 +119,10 @@ impl AppState {
 
     /// Register an SSE sender for a session.
     pub async fn register_sse_sender(&self, session_id: &str, sender: SseSender) {
-        self.sse_senders.write().await.insert(session_id.to_string(), sender);
+        self.sse_senders
+            .write()
+            .await
+            .insert(session_id.to_string(), sender);
     }
 
     /// Remove an SSE sender for a session.
@@ -164,14 +170,19 @@ mod tests {
         // Spawn task that sets origin after 150ms
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(150)).await;
-            state2.set_tunnel_origin(Some("https://example.trycloudflare.com".to_string())).await;
+            state2
+                .set_tunnel_origin(Some("https://example.trycloudflare.com".to_string()))
+                .await;
         });
 
         let start = tokio::time::Instant::now();
         state.wait_for_tunnel_ready(Duration::from_secs(2)).await;
         let elapsed = start.elapsed();
 
-        assert!(elapsed < Duration::from_millis(600), "expected <600ms, got {:?}", elapsed);
+        assert!(
+            elapsed < Duration::from_millis(600),
+            "expected <600ms, got {elapsed:?}"
+        );
         assert!(state.tunnel_origin.read().await.is_some());
     }
 
@@ -180,24 +191,37 @@ mod tests {
         let state = test_state(TunnelMode::Quick);
 
         let start = tokio::time::Instant::now();
-        state.wait_for_tunnel_ready(Duration::from_millis(450)).await;
+        state
+            .wait_for_tunnel_ready(Duration::from_millis(450))
+            .await;
         let elapsed = start.elapsed();
 
-        assert!(elapsed >= Duration::from_millis(400), "expected >=400ms, got {:?}", elapsed);
-        assert!(elapsed < Duration::from_millis(1000), "expected <1000ms, got {:?}", elapsed);
+        assert!(
+            elapsed >= Duration::from_millis(400),
+            "expected >=400ms, got {elapsed:?}"
+        );
+        assert!(
+            elapsed < Duration::from_millis(1000),
+            "expected <1000ms, got {elapsed:?}"
+        );
         assert!(state.tunnel_origin.read().await.is_none());
     }
 
     #[tokio::test]
     async fn wait_hot_path_returns_immediately() {
         let state = test_state(TunnelMode::Quick);
-        state.set_tunnel_origin(Some("https://ready.example.com".to_string())).await;
+        state
+            .set_tunnel_origin(Some("https://ready.example.com".to_string()))
+            .await;
 
         let start = tokio::time::Instant::now();
         state.wait_for_tunnel_ready(Duration::from_secs(5)).await;
         let elapsed = start.elapsed();
 
-        assert!(elapsed < Duration::from_millis(50), "expected <50ms, got {:?}", elapsed);
+        assert!(
+            elapsed < Duration::from_millis(50),
+            "expected <50ms, got {elapsed:?}"
+        );
     }
 
     #[tokio::test]
@@ -209,6 +233,9 @@ mod tests {
         state.wait_for_tunnel_ready(Duration::from_secs(10)).await;
         let elapsed = start.elapsed();
 
-        assert!(elapsed < Duration::from_millis(50), "expected <50ms, got {:?}", elapsed);
+        assert!(
+            elapsed < Duration::from_millis(50),
+            "expected <50ms, got {elapsed:?}"
+        );
     }
 }

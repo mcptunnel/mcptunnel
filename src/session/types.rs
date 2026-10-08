@@ -8,6 +8,12 @@ pub struct Session {
     pub id: String,
     pub mount_slug: String,
     pub session_id: String,
+    #[serde(default)]
+    pub principal: String,
+    #[serde(default)]
+    pub protocol_version: String,
+    #[serde(skip)]
+    pub permits: Option<std::sync::Arc<tokio::sync::Semaphore>>,
     pub upstream_pid: Option<u32>,
     pub status: SessionStatus,
     pub created_at: DateTime<Utc>,
@@ -73,7 +79,7 @@ mod tests {
         let id2 = generate_session_id();
         assert_ne!(id1, id2);
         assert_eq!(id1.len(), 64); // 32 bytes = 64 hex chars
-        // All hex characters
+                                   // All hex characters
         assert!(id1.chars().all(|c| c.is_ascii_hexdigit()));
     }
 

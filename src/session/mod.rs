@@ -1,11 +1,11 @@
 pub mod types;
 
+use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::Utc;
 
-use types::{Session, SessionConfig, SessionStatus, generate_session_id};
+use types::{generate_session_id, Session, SessionConfig, SessionStatus};
 
 /// Session manager: tracks active sessions across all mounts.
 pub struct SessionManager {
@@ -44,6 +44,11 @@ impl SessionManager {
             id: uuid::Uuid::new_v4().to_string(),
             mount_slug: mount_slug.to_string(),
             session_id: session_id.clone(),
+            principal: String::new(),
+            protocol_version: String::new(),
+            permits: Some(Arc::new(tokio::sync::Semaphore::new(
+                self.config.max_inflight_per_session,
+            ))),
             upstream_pid: None,
             status: SessionStatus::Active,
             created_at: now,
@@ -54,6 +59,13 @@ impl SessionManager {
 
         sessions.insert(session_id, session.clone());
         Ok(session)
+    }
+
+    pub async fn bind(&self, id: &str, principal: String, protocol_version: String) {
+        if let Some(session) = self.sessions.write().await.get_mut(id) {
+            session.principal = principal;
+            session.protocol_version = protocol_version;
+        }
     }
 
     /// Look up a session by its session ID.

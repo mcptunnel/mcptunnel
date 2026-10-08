@@ -1,15 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::config::AuthModeConfig;
 use crate::daemon::state::AppState;
 use crate::mount::types::*;
-use crate::config::AuthModeConfig;
 
 /// Admin RPC request.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params")]
 pub enum AdminRequest {
-    MountCreate(MountCreateRequest),
+    MountCreate(Box<MountCreateRequest>),
     MountDelete { slug: String },
     MountList,
     MountInspect { slug: String },
@@ -54,16 +54,15 @@ pub struct MountCreateRequest {
 }
 
 /// Handle an admin RPC request.
-pub async fn handle_admin_request(
-    state: &Arc<AppState>,
-    request: AdminRequest,
-) -> AdminResponse {
+pub async fn handle_admin_request(state: &Arc<AppState>, request: AdminRequest) -> AdminResponse {
     match request {
-        AdminRequest::MountCreate(req) => handle_mount_create(state, req).await,
+        AdminRequest::MountCreate(req) => handle_mount_create(state, *req).await,
         AdminRequest::MountDelete { slug } => handle_mount_delete(state, &slug).await,
         AdminRequest::MountList => handle_mount_list(state).await,
         AdminRequest::MountInspect { slug } => handle_mount_inspect(state, &slug).await,
-        AdminRequest::MountLogsTail { slug, lines } => handle_mount_logs(state, &slug, lines.unwrap_or(50)).await,
+        AdminRequest::MountLogsTail { slug, lines } => {
+            handle_mount_logs(state, &slug, lines.unwrap_or(50)).await
+        }
         AdminRequest::DaemonStatus => handle_daemon_status(state).await,
         AdminRequest::DaemonShutdown => handle_daemon_shutdown(state).await,
         AdminRequest::TunnelStatus => handle_tunnel_status(state).await,
@@ -71,14 +70,19 @@ pub async fn handle_admin_request(
     }
 }
 
-async fn handle_mount_create(
-    state: &Arc<AppState>,
-    req: MountCreateRequest,
-) -> AdminResponse {
+async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> AdminResponse {
     let tunnel_mode = match req.tunnel_mode.as_deref() {
         Some("managed") => crate::config::TunnelMode::Managed,
+        Some("quick") => crate::config::TunnelMode::Quick,
+        Some("local") => crate::config::TunnelMode::Local,
         _ => state.config.tunnel.default_mode,
     };
+    if let Err(message) = crate::tunnel::validate_selection(tunnel_mode, req.hostname.as_deref()) {
+        return AdminResponse::Error { message, code: 2 };
+    }
+    if tunnel_mode != state.config.tunnel.default_mode {
+        return AdminResponse::Error { message: "all mounts share the daemon transport; configure tunnel.default_mode and restart the daemon".into(), code: 2 };
+    }
     let auth_mode = match req.auth_mode.as_deref() {
         Some("public") => AuthModeConfig::Public,
         Some("basic") => AuthModeConfig::Basic,
@@ -91,6 +95,26 @@ async fn handle_mount_create(
         Some("off") => crate::config::ProbeMode::Off,
         _ => state.config.defaults.probe_mode,
     };
+    if auth_mode == AuthModeConfig::Inherit {
+        return AdminResponse::Error {
+            message: "stdio auth cannot be inherited; choose basic, oauth or explicit public"
+                .into(),
+            code: 2,
+        };
+    }
+    if auth_mode == AuthModeConfig::OAuth && req.oidc_issuer.is_none() {
+        return AdminResponse::Error { message: "built-in OAuth is disabled; supply --oidc-issuer for an external OAuth server with resource-bound tokens, PKCE and CIMD or safe DCR".into(), code: 2 };
+    }
+    if let Some(issuer) = &req.oidc_issuer {
+        if crate::auth::oauth::validate_https_url(issuer).is_err() {
+            return AdminResponse::Error {
+                message:
+                    "--oidc-issuer must be an HTTPS issuer URL without credentials or fragments"
+                        .into(),
+                code: 2,
+            };
+        }
+    }
 
     // Build OAuth config if auth mode is OAuth
     let oauth_config = if auth_mode == AuthModeConfig::OAuth {
@@ -151,18 +175,22 @@ async fn handle_mount_create(
     // Create mount
     let record = match state.mount_registry.create(params) {
         Ok(r) => r,
-        Err(e) => return AdminResponse::Error {
-            message: e.to_string(),
-            code: e.exit_code(),
-        },
+        Err(e) => {
+            return AdminResponse::Error {
+                message: e.to_string(),
+                code: e.exit_code(),
+            }
+        }
     };
 
     // Run probe if eager
     if probe_mode == crate::config::ProbeMode::Eager {
         let probe = crate::upstream::probe::probe_upstream(
             &record.command,
+            record.cwd.as_deref(),
             &record.env_vars,
-        ).await;
+        )
+        .await;
 
         if !probe.ok {
             // Clean up
@@ -174,18 +202,22 @@ async fn handle_mount_create(
         }
 
         let _ = state.mount_registry.set_probe_result(&record.slug, &probe);
-        let _ = state.mount_registry.set_status(&record.slug, MountStatus::Ready);
+        let _ = state
+            .mount_registry
+            .set_status(&record.slug, MountStatus::Ready);
     } else {
-        let _ = state.mount_registry.set_status(&record.slug, MountStatus::Ready);
+        let _ = state
+            .mount_registry
+            .set_status(&record.slug, MountStatus::Ready);
     }
 
-    state.wait_for_tunnel_ready(std::time::Duration::from_secs(30)).await;
+    state
+        .wait_for_tunnel_ready(std::time::Duration::from_secs(30))
+        .await;
     let public_url = state.public_url(&record.slug).await;
 
     // Build credentials URL if Basic Auth
-    let credentials_url = record.basic_credentials.as_ref().map(|creds| {
-        crate::auth::basic::build_credentials_url(&public_url, creds)
-    });
+    let basic_credentials = record.basic_credentials.as_ref();
 
     // Include OAuth credentials if built-in mode
     let oauth_credentials = record.oauth_config.as_ref().and_then(|c| {
@@ -208,7 +240,7 @@ async fn handle_mount_create(
                 "auth_mode": auth_mode.to_string(),
                 "tunnel_mode": tunnel_mode.to_string(),
                 "public_url": public_url,
-                "credentials_url": credentials_url,
+                "basic_credentials": basic_credentials,
                 "oauth_credentials": oauth_credentials,
             }
         }),
@@ -216,6 +248,10 @@ async fn handle_mount_create(
 }
 
 async fn handle_mount_delete(state: &Arc<AppState>, slug: &str) -> AdminResponse {
+    if let Some(ct) = state.mount_cancellation.write().await.remove(slug) {
+        ct.cancel();
+    }
+    state.mount_permits.write().await.remove(slug);
     // Remove sessions
     let removed = state.session_manager.remove_mount_sessions(slug).await;
 
@@ -223,10 +259,14 @@ async fn handle_mount_delete(state: &Arc<AppState>, slug: &str) -> AdminResponse
     let mut children = state.upstream_children.write().await;
     for session in &removed {
         if let Some(child) = children.remove(&session.session_id) {
-            child.shutdown().await;
+            child.cancel();
+            if let Ok(child) = Arc::try_unwrap(child) {
+                child.shutdown().await;
+            }
         }
     }
     drop(children);
+    state.mount_logs.write().await.remove(slug);
 
     match state.mount_registry.remove(slug) {
         Ok(true) => AdminResponse::Ok {
@@ -251,13 +291,16 @@ async fn handle_mount_list(state: &Arc<AppState>) -> AdminResponse {
     let mounts = state.mount_registry.list().unwrap_or_default();
     let tunnel_origin = state.tunnel_origin.read().await.clone();
 
-    let summaries: Vec<serde_json::Value> = futures::future::join_all(
-        mounts.iter().map(|m| async {
+    let summaries: Vec<serde_json::Value> =
+        futures::future::join_all(mounts.iter().map(|m| async {
             let sessions = state.session_manager.active_count(&m.slug).await;
-            let tools = m.last_probe_result.as_ref()
+            let tools = m
+                .last_probe_result
+                .as_ref()
                 .map(|p| p.tools.len())
                 .unwrap_or(0);
-            let url = tunnel_origin.as_ref()
+            let url = tunnel_origin
+                .as_ref()
                 .map(|o| format!("{}/{}/mcp", o, m.slug))
                 .unwrap_or_else(|| format!("pending:/{}/mcp", m.slug));
 
@@ -270,8 +313,8 @@ async fn handle_mount_list(state: &Arc<AppState>) -> AdminResponse {
                 "tools": tools,
                 "url": url,
             })
-        })
-    ).await;
+        }))
+        .await;
 
     AdminResponse::Ok {
         data: serde_json::json!({ "mounts": summaries }),
@@ -281,23 +324,25 @@ async fn handle_mount_list(state: &Arc<AppState>) -> AdminResponse {
 async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminResponse {
     let mount = match state.mount_registry.get(slug) {
         Ok(Some(m)) => m,
-        Ok(None) => return AdminResponse::Error {
-            message: format!("mount '{slug}' not found"),
-            code: crate::error::exit_codes::MOUNT_NOT_FOUND,
-        },
-        Err(e) => return AdminResponse::Error {
-            message: e.to_string(),
-            code: crate::error::exit_codes::INTERNAL_GATEWAY_ERROR,
-        },
+        Ok(None) => {
+            return AdminResponse::Error {
+                message: format!("mount '{slug}' not found"),
+                code: crate::error::exit_codes::MOUNT_NOT_FOUND,
+            }
+        }
+        Err(e) => {
+            return AdminResponse::Error {
+                message: e.to_string(),
+                code: crate::error::exit_codes::INTERNAL_GATEWAY_ERROR,
+            }
+        }
     };
 
     let sessions = state.session_manager.active_count(slug).await;
-    state.wait_for_tunnel_ready(std::time::Duration::from_secs(30)).await;
+    state
+        .wait_for_tunnel_ready(std::time::Duration::from_secs(30))
+        .await;
     let public_url = state.public_url(slug).await;
-
-    let credentials_url = mount.basic_credentials.as_ref().map(|creds| {
-        crate::auth::basic::build_credentials_url(&public_url, creds)
-    });
 
     AdminResponse::Ok {
         data: serde_json::json!({
@@ -308,7 +353,6 @@ async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminRespons
             "tunnel_mode": mount.tunnel_mode.to_string(),
             "command": format!("{} {}", mount.command.program, mount.command.args.join(" ")),
             "public_url": public_url,
-            "credentials_url": credentials_url,
             "active_sessions": sessions,
             "created_at": mount.created_at.to_rfc3339(),
             "last_probe": mount.last_probe_result,
@@ -321,10 +365,12 @@ async fn handle_mount_logs(state: &Arc<AppState>, slug: &str, lines: usize) -> A
     // Check mount exists
     match state.mount_registry.get(slug) {
         Ok(Some(_)) => {}
-        _ => return AdminResponse::Error {
-            message: format!("mount '{slug}' not found"),
-            code: crate::error::exit_codes::MOUNT_NOT_FOUND,
-        },
+        _ => {
+            return AdminResponse::Error {
+                message: format!("mount '{slug}' not found"),
+                code: crate::error::exit_codes::MOUNT_NOT_FOUND,
+            }
+        }
     }
 
     let log_lines = state.get_logs(slug, lines).await;
@@ -379,10 +425,7 @@ async fn handle_tunnel_status(state: &Arc<AppState>) -> AdminResponse {
     }
 }
 
-async fn handle_doctor_run(
-    state: &Arc<AppState>,
-    slug: Option<&str>,
-) -> AdminResponse {
+async fn handle_doctor_run(state: &Arc<AppState>, slug: Option<&str>) -> AdminResponse {
     let mut checks = Vec::new();
 
     // Check cloudflared

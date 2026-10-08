@@ -1,7 +1,7 @@
 use serde_json::json;
 
 /// Inject `noauth` security scheme into tool descriptors.
-pub fn inject_noauth_scheme(tools: &mut Vec<serde_json::Value>) {
+pub fn inject_noauth_scheme(tools: &mut [serde_json::Value]) {
     let noauth = json!([{"type": "noauth"}]);
     for tool in tools.iter_mut() {
         if let Some(obj) = tool.as_object_mut() {
@@ -35,15 +35,16 @@ mod tests {
 
         for tool in &tools {
             assert_eq!(tool["securitySchemes"], json!([{"type": "noauth"}]));
-            assert_eq!(tool["_meta"]["securitySchemes"], json!([{"type": "noauth"}]));
+            assert_eq!(
+                tool["_meta"]["securitySchemes"],
+                json!([{"type": "noauth"}])
+            );
         }
     }
 
     #[test]
     fn test_preserve_existing_scheme() {
-        let mut tools = vec![
-            json!({"name": "tool_a", "securitySchemes": [{"type": "oauth2"}]}),
-        ];
+        let mut tools = vec![json!({"name": "tool_a", "securitySchemes": [{"type": "oauth2"}]})];
         inject_noauth_scheme(&mut tools);
 
         // Should NOT overwrite existing securitySchemes

@@ -1,5 +1,5 @@
-use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
@@ -12,10 +12,10 @@ pub struct BasicAuthCredentials {
 }
 
 /// Generate new Basic Auth credentials.
-/// Username is always `mct`; password is 16 random hex chars (64 bits of entropy).
+/// Username is always `mct`; password has 128 bits of entropy.
 pub fn generate_credentials() -> BasicAuthCredentials {
     let mut rng = rand::thread_rng();
-    let bytes: [u8; 8] = rng.gen();
+    let bytes: [u8; 16] = rng.gen();
     BasicAuthCredentials {
         username: "mct".to_string(),
         password: hex::encode(bytes),
@@ -45,8 +45,7 @@ pub fn validate_basic_auth(
         .decode(trimmed)
         .map_err(|_| BasicAuthError::InvalidEncoding)?;
 
-    let decoded = String::from_utf8(decoded_bytes)
-        .map_err(|_| BasicAuthError::InvalidEncoding)?;
+    let decoded = String::from_utf8(decoded_bytes).map_err(|_| BasicAuthError::InvalidEncoding)?;
 
     let (user, pass) = decoded
         .split_once(':')
@@ -59,18 +58,6 @@ pub fn validate_basic_auth(
         Ok(())
     } else {
         Err(BasicAuthError::InvalidCredentials)
-    }
-}
-
-/// Build a URL with embedded credentials: `https://user:pass@host/path`
-pub fn build_credentials_url(base_url: &str, creds: &BasicAuthCredentials) -> String {
-    if let Some(rest) = base_url.strip_prefix("https://") {
-        format!("https://{}:{}@{}", creds.username, creds.password, rest)
-    } else if let Some(rest) = base_url.strip_prefix("http://") {
-        format!("http://{}:{}@{}", creds.username, creds.password, rest)
-    } else {
-        // Fallback: prepend credentials before the URL as-is
-        format!("{}:{}@{}", creds.username, creds.password, base_url)
     }
 }
 
@@ -103,7 +90,7 @@ mod tests {
     fn test_generate_credentials() {
         let creds = generate_credentials();
         assert_eq!(creds.username, "mct");
-        assert_eq!(creds.password.len(), 16);
+        assert_eq!(creds.password.len(), 32);
         // All hex chars
         assert!(creds.password.chars().all(|c| c.is_ascii_hexdigit()));
     }
@@ -187,25 +174,5 @@ mod tests {
             validate_basic_auth(Some(&header), &creds),
             Err(BasicAuthError::InvalidFormat)
         ));
-    }
-
-    #[test]
-    fn test_build_credentials_url_https() {
-        let creds = BasicAuthCredentials {
-            username: "mct".to_string(),
-            password: "abc123".to_string(),
-        };
-        let url = build_credentials_url("https://example.com/slug/mcp", &creds);
-        assert_eq!(url, "https://mct:abc123@example.com/slug/mcp");
-    }
-
-    #[test]
-    fn test_build_credentials_url_http() {
-        let creds = BasicAuthCredentials {
-            username: "mct".to_string(),
-            password: "abc123".to_string(),
-        };
-        let url = build_credentials_url("http://localhost:8080/slug/mcp", &creds);
-        assert_eq!(url, "http://mct:abc123@localhost:8080/slug/mcp");
     }
 }

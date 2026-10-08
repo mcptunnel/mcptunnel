@@ -66,9 +66,7 @@ pub fn init_db(conn: &Connection) -> SqlResult<()> {
         .prepare("SELECT basic_credentials_json FROM mounts LIMIT 0")
         .is_ok();
     if !has_basic_creds {
-        conn.execute_batch(
-            "ALTER TABLE mounts ADD COLUMN basic_credentials_json TEXT;"
-        )?;
+        conn.execute_batch("ALTER TABLE mounts ADD COLUMN basic_credentials_json TEXT;")?;
     }
 
     Ok(())
@@ -108,9 +106,10 @@ pub fn list_mounts(conn: &Connection) -> SqlResult<Vec<MountRecord>> {
         "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json FROM mounts"
     )?;
 
-    let records = stmt.query_map([], |row| {
-        Ok(row_to_mount(row))
-    })?.filter_map(|r| r.ok()).collect();
+    let records = stmt
+        .query_map([], |row| Ok(row_to_mount(row)))?
+        .filter_map(|r| r.ok())
+        .collect();
 
     Ok(records)
 }
@@ -200,11 +199,13 @@ fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
             "oauth" => AuthModeConfig::OAuth,
             _ => AuthModeConfig::Public,
         },
-        basic_credentials: basic_creds_json.and_then(|j| serde_json::from_str::<BasicAuthCredentials>(&j).ok()),
+        basic_credentials: basic_creds_json
+            .and_then(|j| serde_json::from_str::<BasicAuthCredentials>(&j).ok()),
         oauth_config: oauth_json.and_then(|j| serde_json::from_str(&j).ok()),
         policy: serde_json::from_str(&policy_json).unwrap_or_default(),
         tunnel_mode: match tunnel_mode_str.as_str() {
             "managed" => crate::config::TunnelMode::Managed,
+            "local" => crate::config::TunnelMode::Local,
             _ => crate::config::TunnelMode::Quick,
         },
         hostname: row.get(9).ok().unwrap_or(None),
@@ -318,7 +319,9 @@ mod tests {
         });
         insert_mount(&conn, &record).unwrap();
 
-        let fetched = get_mount_by_slug(&conn, "basic-auth-test").unwrap().unwrap();
+        let fetched = get_mount_by_slug(&conn, "basic-auth-test")
+            .unwrap()
+            .unwrap();
         assert_eq!(fetched.auth_mode, AuthModeConfig::Basic);
         let creds = fetched.basic_credentials.unwrap();
         assert_eq!(creds.username, "mct");

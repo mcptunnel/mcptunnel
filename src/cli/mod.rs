@@ -19,7 +19,7 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Create/register a mount and expose an MCP server.
-    Run(RunArgs),
+    Run(Box<RunArgs>),
 
     /// Show all mounts.
     List {
@@ -99,7 +99,7 @@ pub struct RunArgs {
     pub env: Vec<String>,
 
     /// Tunnel mode.
-    #[arg(long, value_parser = ["quick", "managed"])]
+    #[arg(long, value_parser = ["quick", "managed", "local"])]
     pub tunnel: Option<String>,
 
     /// Managed mode hostname.

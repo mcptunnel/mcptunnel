@@ -2,19 +2,16 @@ use rand::Rng;
 
 /// Word lists for generating memorable slugs.
 const ADJECTIVES: &[&str] = &[
-    "amber", "azure", "bold", "calm", "cool", "dark", "deep", "fair",
-    "fast", "glad", "gold", "gray", "keen", "kind", "lean", "mild",
-    "neat", "pale", "pure", "rare", "rich", "safe", "soft", "teal",
-    "true", "warm", "wise", "wild", "bold", "firm",
+    "amber", "azure", "bold", "calm", "cool", "dark", "deep", "fair", "fast", "glad", "gold",
+    "gray", "keen", "kind", "lean", "mild", "neat", "pale", "pure", "rare", "rich", "safe", "soft",
+    "teal", "true", "warm", "wise", "wild", "bold", "firm",
 ];
 
 const NOUNS: &[&str] = &[
-    "arch", "beam", "bell", "bird", "bolt", "cape", "chip", "claw",
-    "core", "crow", "dawn", "dock", "dove", "drum", "dust", "edge",
-    "fern", "fire", "flux", "gate", "glow", "haze", "helm", "hive",
-    "isle", "jade", "knot", "lamp", "lark", "leaf", "link", "loom",
-    "moon", "nest", "node", "opal", "palm", "peak", "pine", "pond",
-    "reed", "reef", "root", "ruby", "sage", "seal", "star", "tide",
+    "arch", "beam", "bell", "bird", "bolt", "cape", "chip", "claw", "core", "crow", "dawn", "dock",
+    "dove", "drum", "dust", "edge", "fern", "fire", "flux", "gate", "glow", "haze", "helm", "hive",
+    "isle", "jade", "knot", "lamp", "lark", "leaf", "link", "loom", "moon", "nest", "node", "opal",
+    "palm", "peak", "pine", "pond", "reed", "reef", "root", "ruby", "sage", "seal", "star", "tide",
     "vale", "vine", "wave", "wren", "zero",
 ];
 

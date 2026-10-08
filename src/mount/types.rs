@@ -80,6 +80,8 @@ pub struct ProbeResult {
     pub server_name: Option<String>,
     pub server_version: Option<String>,
     pub tools: Vec<String>,
+    #[serde(default)]
+    pub tool_definitions: Vec<serde_json::Value>,
     pub resources: Vec<String>,
     pub prompts: Vec<String>,
     pub capabilities: Option<serde_json::Value>,

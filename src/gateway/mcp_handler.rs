@@ -1,754 +1,326 @@
-use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
-use axum::Json;
+use crate::{daemon::state::AppState, gateway::bridge::Bridge, upstream::child::UpstreamChild};
+use axum::{
+    body::{to_bytes, Body},
+    extract::{Path, State},
+    http::{Method, Request, StatusCode},
+    response::{IntoResponse, Response},
+    Json,
+};
+use rmcp::transport::streamable_http_server::{
+    session::never::NeverSessionManager, StreamableHttpServerConfig, StreamableHttpService,
+};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tower::ServiceExt;
 
-use crate::config::{AuthModeConfig, TunnelMode};
-use crate::daemon::state::AppState;
-use crate::logging::hash_session_id;
-use crate::policy::filter;
+pub const BODY_LIMIT: usize = 1024 * 1024;
+pub const SUPPORTED: [&str; 4] = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"];
 
-/// POST /<slug>/mcp — main JSON-RPC entrypoint.
-pub async fn handle_post_mcp(
+pub fn rpc_error(status: StatusCode, id: Value, code: i64, message: &str) -> Response {
+    (
+        status,
+        Json(json!({"jsonrpc":"2.0", "id":id, "error":{"code":code,"message":message}})),
+    )
+        .into_response()
+}
+
+/// Authentication and application-level legacy sessions wrap the SDK's stateless transport.
+/// Modern requests never allocate a protocol session, even if a client sends an old session ID.
+pub async fn handle_mcp(
     State(state): State<Arc<AppState>>,
     Path(slug): Path<String>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> (StatusCode, HeaderMap, Json<Value>) {
-    let mut resp_headers = HeaderMap::new();
-    let start = std::time::Instant::now();
-
-    // Look up mount
+    request: Request<Body>,
+) -> Response {
     let mount = match state.mount_registry.get(&slug) {
         Ok(Some(m)) => m,
-        _ => {
-            return (
-                StatusCode::NOT_FOUND,
-                resp_headers,
-                Json(json_rpc_error(body.get("id").cloned(), -32001, "mount not found")),
-            );
-        }
+        _ => return StatusCode::NOT_FOUND.into_response(),
     };
-
-    // Basic Auth enforcement
-    if mount.auth_mode == AuthModeConfig::Basic {
-        if let Err(resp) = check_basic_auth(&mount, &headers) {
-            return (resp.0, resp.1, Json(resp.2));
-        }
+    if mount.tunnel_mode == crate::config::TunnelMode::Managed {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "managed provisioning is not implemented",
+        )
+            .into_response();
     }
-
-    // OAuth enforcement — check bearer token for all requests (including initialize).
-    // MCP spec: client gets 401, discovers PRM, does OAuth flow, retries with token.
-    if mount.auth_mode == AuthModeConfig::OAuth {
-        if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
-            return (challenge.0, challenge.1, Json(challenge.2));
-        }
+    if let Err(response) =
+        crate::gateway::security::validate_boundary(&state, request.headers()).await
+    {
+        return response;
     }
-
-    // Handle batch requests
-    if let Some(batch) = body.as_array() {
-        let mut results = Vec::new();
-        for item in batch {
-            let result = handle_single_request(&state, &slug, &mount, &headers, item, &mut resp_headers).await;
-            results.push(result);
-        }
-        let duration = start.elapsed();
-        info!(slug = %slug, duration_ms = duration.as_millis(), batch_size = results.len(), "Batch request completed");
-        return (StatusCode::OK, resp_headers, Json(Value::Array(results)));
-    }
-
-    // Single request
-    let result = handle_single_request(&state, &slug, &mount, &headers, &body, &mut resp_headers).await;
-    let duration = start.elapsed();
-    let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("unknown");
-    info!(
-        slug = %slug,
-        method = method,
-        duration_ms = duration.as_millis(),
-        "Request completed"
-    );
-
-    // Append to mount log ring buffer
-    let log_line = format!(
-        "{} method={} duration={}ms",
-        chrono::Utc::now().to_rfc3339(),
-        method,
-        duration.as_millis()
-    );
-    state.append_log(&slug, log_line).await;
-
-    (StatusCode::OK, resp_headers, Json(result))
-}
-
-/// Handle a single JSON-RPC request.
-async fn handle_single_request(
-    state: &Arc<AppState>,
-    slug: &str,
-    mount: &crate::mount::types::MountRecord,
-    headers: &HeaderMap,
-    request: &Value,
-    resp_headers: &mut HeaderMap,
-) -> Value {
-    let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
-    let id = request.get("id").cloned();
-    let params = request.get("params").cloned();
-
-    match method {
-        "initialize" => handle_initialize(state, slug, mount, id, params, resp_headers).await,
-        "notifications/initialized" => {
-            // No-op notification, just acknowledge
-            Value::Null
-        }
-        "tools/list" => handle_tools_list(state, slug, mount, headers, id).await,
-        "tools/call" => handle_tools_call(state, slug, mount, headers, id, params).await,
-        "resources/list" => handle_resources_list(state, slug, mount, id).await,
-        "resources/read" => handle_resources_read(state, slug, mount, headers, id, params).await,
-        "prompts/list" => handle_prompts_list(state, slug, mount, id).await,
-        "prompts/get" => handle_prompts_get(state, slug, mount, headers, id, params).await,
-        "ping" => json_rpc_result(id, json!({})),
-        _ => {
-            // Check for notifications (no id = notification)
-            if id.is_none() || id.as_ref() == Some(&Value::Null) {
-                Value::Null // Notifications don't get responses
-            } else {
-                json_rpc_error(id, -32601, &format!("method not found: {method}"))
-            }
-        }
-    }
-}
-
-/// Handle initialize request — create session and upstream child.
-async fn handle_initialize(
-    state: &Arc<AppState>,
-    slug: &str,
-    mount: &crate::mount::types::MountRecord,
-    id: Option<Value>,
-    _params: Option<Value>,
-    resp_headers: &mut HeaderMap,
-) -> Value {
-    // Create session
-    let session = match state.session_manager.create_session(slug).await {
-        Ok(s) => s,
-        Err(e) => return json_rpc_error(id, -32000, &format!("session creation failed: {e}")),
-    };
-
-    // Spawn upstream child
-    let child = match crate::upstream::child::UpstreamChild::spawn(
-        &mount.command,
-        mount.cwd.as_deref(),
-        &mount.env_vars,
-    ).await {
-        Ok(c) => c,
-        Err(e) => {
-            state.session_manager.delete_session(&session.session_id).await;
-            return json_rpc_error(id, -32000, &format!("upstream spawn failed: {e}"));
-        }
-    };
-
-    // Get server info from child
-    let peer_info = child.peer().peer_info();
-    let server_info = peer_info.map(|i| {
-        json!({
-            "name": &i.server_info.name,
-            "version": &i.server_info.version,
-        })
-    });
-
-    let capabilities = build_downstream_capabilities(mount);
-    let protocol_version = peer_info
-        .map(|i| i.protocol_version.as_str().to_string())
-        .unwrap_or_else(|| "2025-03-26".to_string());
-
-    // Store child in state
-    state.upstream_children.write().await.insert(
-        session.session_id.clone(),
-        child,
-    );
-
-    // Set session ID header
-    resp_headers.insert(
-        "mcp-session-id",
-        session.session_id.parse().unwrap(),
-    );
-
-    info!(
-        slug = %slug,
-        session_id_hash = %hash_session_id(&session.session_id),
-        "Session created"
-    );
-
-    json_rpc_result(id, json!({
-        "protocolVersion": protocol_version,
-        "capabilities": capabilities,
-        "serverInfo": server_info.unwrap_or(json!({
-            "name": &mount.display_name,
-            "version": "0.1.0"
-        })),
-    }))
-}
-
-/// Build downstream server capabilities based on mount config and mode.
-fn build_downstream_capabilities(mount: &crate::mount::types::MountRecord) -> Value {
-    let mut caps = json!({});
-    if let Some(obj) = caps.as_object_mut() {
-        // Always advertise tools if policy allows any
-        obj.insert("tools".to_string(), json!({}));
-
-        if mount.policy.expose_resources {
-            obj.insert("resources".to_string(), json!({}));
-        }
-        if mount.policy.expose_prompts {
-            obj.insert("prompts".to_string(), json!({}));
-        }
-    }
-    caps
-}
-
-/// Handle tools/list — filter by policy + overlay auth metadata.
-async fn handle_tools_list(
-    state: &Arc<AppState>,
-    _slug: &str,
-    mount: &crate::mount::types::MountRecord,
-    headers: &HeaderMap,
-    id: Option<Value>,
-) -> Value {
-    let session_id = get_session_id(headers);
-    let children = state.upstream_children.read().await;
-
-    let child = match session_id.as_deref().and_then(|sid| children.get(sid)) {
-        Some(c) => c,
-        None => return json_rpc_error(id, -32001, "session not found or expired"),
-    };
-
-    // Touch session activity
-    if let Some(sid) = &session_id {
-        state.session_manager.touch_session(sid).await;
-    }
-
-    match child.send_raw_request("tools/list", None).await {
-        Ok(result) => {
-            let mut tools = result.get("tools")
-                .and_then(|t| t.as_array())
-                .cloned()
-                .unwrap_or_default();
-
-            // Apply policy filter
-            tools = filter::filter_tools(&mount.policy, tools);
-
-            // Apply auth metadata overlay
-            if mount.auth_mode == AuthModeConfig::Public {
-                crate::auth::public::inject_noauth_scheme(&mut tools);
-            }
-
-            json_rpc_result(id, json!({ "tools": tools }))
-        }
-        Err(e) => json_rpc_error(id, -32000, &e.to_string()),
-    }
-}
-
-/// Handle tools/call — check policy + forward.
-async fn handle_tools_call(
-    state: &Arc<AppState>,
-    slug: &str,
-    mount: &crate::mount::types::MountRecord,
-    headers: &HeaderMap,
-    id: Option<Value>,
-    params: Option<Value>,
-) -> Value {
-    let session_id = get_session_id(headers);
-    let children = state.upstream_children.read().await;
-
-    let child = match session_id.as_deref().and_then(|sid| children.get(sid)) {
-        Some(c) => c,
-        None => return json_rpc_error(id, -32001, "session not found or expired"),
-    };
-
-    if let Some(sid) = &session_id {
-        state.session_manager.touch_session(sid).await;
-    }
-
-    // Check policy
-    if let Some(ref p) = params {
-        if let Some(tool_name) = p.get("name").and_then(|n| n.as_str()) {
-            if !filter::is_tool_allowed(&mount.policy, tool_name) {
-                warn!(slug = %slug, tool = tool_name, "Policy blocked tool call");
-                return json_rpc_error(id, filter::POLICY_VIOLATION_CODE, &format!(
-                    "tool '{tool_name}' is not exposed by policy"
-                ));
-            }
-        }
-    }
-
-    match child.send_raw_request("tools/call", params).await {
-        Ok(result) => json_rpc_result(id, result),
-        Err(e) => json_rpc_error(id, -32000, &e.to_string()),
-    }
-}
-
-/// Handle resources/list — filter by policy.
-async fn handle_resources_list(
-    _state: &Arc<AppState>,
-    _slug: &str,
-    mount: &crate::mount::types::MountRecord,
-    id: Option<Value>,
-) -> Value {
-    if !mount.policy.expose_resources {
-        return json_rpc_result(id, json!({ "resources": [] }));
-    }
-    // For resources/list without a session, return from probe data if available
-    if let Some(ref probe) = mount.last_probe_result {
-        let resources: Vec<Value> = probe.resources.iter()
-            .map(|r| json!({"uri": r, "name": r}))
-            .collect();
-        let filtered = filter::filter_resources(&mount.policy, resources);
-        return json_rpc_result(id, json!({ "resources": filtered }));
-    }
-    json_rpc_result(id, json!({ "resources": [] }))
-}
-
-/// Handle resources/read — check policy + forward.
-async fn handle_resources_read(
-    state: &Arc<AppState>,
-    _slug: &str,
-    _mount: &crate::mount::types::MountRecord,
-    headers: &HeaderMap,
-    id: Option<Value>,
-    params: Option<Value>,
-) -> Value {
-    let session_id = get_session_id(headers);
-    let children = state.upstream_children.read().await;
-
-    let child = match session_id.as_deref().and_then(|sid| children.get(sid)) {
-        Some(c) => c,
-        None => return json_rpc_error(id, -32001, "session not found or expired"),
-    };
-
-    if let Some(sid) = &session_id {
-        state.session_manager.touch_session(sid).await;
-    }
-
-    match child.send_raw_request("resources/read", params).await {
-        Ok(result) => json_rpc_result(id, result),
-        Err(e) => json_rpc_error(id, -32000, &e.to_string()),
-    }
-}
-
-/// Handle prompts/list — filter by policy.
-async fn handle_prompts_list(
-    _state: &Arc<AppState>,
-    _slug: &str,
-    mount: &crate::mount::types::MountRecord,
-    id: Option<Value>,
-) -> Value {
-    if !mount.policy.expose_prompts {
-        return json_rpc_result(id, json!({ "prompts": [] }));
-    }
-    if let Some(ref probe) = mount.last_probe_result {
-        let prompts: Vec<Value> = probe.prompts.iter()
-            .map(|p| json!({"name": p}))
-            .collect();
-        let filtered = filter::filter_prompts(&mount.policy, prompts);
-        return json_rpc_result(id, json!({ "prompts": filtered }));
-    }
-    json_rpc_result(id, json!({ "prompts": [] }))
-}
-
-/// Handle prompts/get — forward to upstream.
-async fn handle_prompts_get(
-    state: &Arc<AppState>,
-    _slug: &str,
-    _mount: &crate::mount::types::MountRecord,
-    headers: &HeaderMap,
-    id: Option<Value>,
-    params: Option<Value>,
-) -> Value {
-    let session_id = get_session_id(headers);
-    let children = state.upstream_children.read().await;
-
-    let child = match session_id.as_deref().and_then(|sid| children.get(sid)) {
-        Some(c) => c,
-        None => return json_rpc_error(id, -32001, "session not found or expired"),
-    };
-
-    if let Some(sid) = &session_id {
-        state.session_manager.touch_session(sid).await;
-    }
-
-    match child.send_raw_request("prompts/get", params).await {
-        Ok(result) => json_rpc_result(id, result),
-        Err(e) => json_rpc_error(id, -32000, &e.to_string()),
-    }
-}
-
-/// GET /<slug>/mcp — SSE stream (managed mode) or 405 (quick mode).
-pub async fn handle_get_mcp(
-    State(state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-    headers: HeaderMap,
-) -> axum::response::Response {
-    use axum::body::Body;
-    use axum::response::IntoResponse;
-    use tokio_stream::wrappers::ReceiverStream;
-
-    let mount = match state.mount_registry.get(&slug) {
-        Ok(Some(m)) => m,
-        _ => {
-            return (StatusCode::NOT_FOUND, Json(json!({"error": "mount not found"}))).into_response();
-        }
-    };
-
-    if mount.tunnel_mode == TunnelMode::Quick {
+    let principal =
+        match crate::gateway::security::authorize(&state, &mount, request.headers()).await {
+            Ok(p) => p,
+            Err(r) => return r,
+        };
+    if request.method() == Method::GET {
         return (
             StatusCode::METHOD_NOT_ALLOWED,
-            Json(json!({"error": "GET SSE not supported in quick mode. Use --tunnel managed for SSE support."})),
-        ).into_response();
+            [("allow", "POST, DELETE")],
+            "SSE subscriptions are not implemented; Quick Tunnels do not support SSE",
+        )
+            .into_response();
     }
-
-    // Basic Auth check for managed mode
-    if mount.auth_mode == AuthModeConfig::Basic {
-        if let Err(resp) = check_basic_auth(&mount, &headers) {
-            return (resp.0, Json(resp.2)).into_response();
+    let header_version = request
+        .headers()
+        .get("mcp-protocol-version")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let sid = request
+        .headers()
+        .get("mcp-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    if request.method() == Method::DELETE {
+        if header_version.as_deref() == Some(SUPPORTED[0]) {
+            return StatusCode::METHOD_NOT_ALLOWED.into_response();
+        }
+        let Some(sid) = sid else {
+            return StatusCode::BAD_REQUEST.into_response();
+        };
+        if !owns_session(&state, &sid, &slug, &principal).await {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        close_session(&state, &sid).await;
+        return StatusCode::NO_CONTENT.into_response();
+    }
+    if request.method() != Method::POST {
+        return StatusCode::METHOD_NOT_ALLOWED.into_response();
+    }
+    let Ok(_global_permit) = state.request_permits.clone().try_acquire_owned() else {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    };
+    let gate = state
+        .mount_permits
+        .write()
+        .await
+        .entry(slug.clone())
+        .or_insert_with(|| {
+            Arc::new(tokio::sync::Semaphore::new(
+                state.config.defaults.max_inflight_per_session,
+            ))
+        })
+        .clone();
+    let Ok(_mount_permit) = gate.try_acquire_owned() else {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    };
+    let (parts, body) = request.into_parts();
+    let bytes = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        to_bytes(body, BODY_LIMIT),
+    )
+    .await
+    {
+        Ok(Ok(bytes)) => bytes,
+        Ok(Err(_)) => return StatusCode::PAYLOAD_TOO_LARGE.into_response(),
+        Err(_) => return StatusCode::REQUEST_TIMEOUT.into_response(),
+    };
+    let body: Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => return rpc_error(StatusCode::BAD_REQUEST, Value::Null, -32700, "parse error"),
+    };
+    let id = body.get("id").cloned().unwrap_or(Value::Null);
+    if !body.is_object()
+        || body["jsonrpc"] != "2.0"
+        || !body["method"].is_string()
+        || body
+            .get("id")
+            .is_some_and(|v| !v.is_string() && !v.is_i64() && !v.is_u64())
+    {
+        return rpc_error(
+            StatusCode::BAD_REQUEST,
+            id,
+            -32600,
+            "invalid JSON-RPC message; batching is unsupported",
+        );
+    }
+    let method = body["method"].as_str().unwrap_or_default();
+    if method == "tools/call" {
+        if let Some(required) = mount.oauth_config.as_ref().and_then(|c| {
+            body["params"]["name"]
+                .as_str()
+                .and_then(|name| c.per_tool_scopes.get(name))
+        }) {
+            let mut scoped_mount = mount.clone();
+            scoped_mount
+                .oauth_config
+                .as_mut()
+                .unwrap()
+                .default_scopes
+                .extend(required.iter().cloned());
+            if let Err(response) =
+                crate::gateway::security::authorize(&state, &scoped_mount, &parts.headers).await
+            {
+                return response;
+            }
         }
     }
-
-    // OAuth check for managed mode
-    if mount.auth_mode == AuthModeConfig::OAuth {
-        if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
-            return (challenge.0, Json(challenge.2)).into_response();
+    let meta_version = body
+        .pointer("/params/_meta/io.modelcontextprotocol~1protocolVersion")
+        .and_then(Value::as_str);
+    let modern =
+        meta_version.is_some() || header_version.as_deref().is_some_and(|v| v >= SUPPORTED[0]);
+    // rmcp's HTTP validator rejects unknown version headers as HeaderMismatch before dispatch.
+    // Preserve its consistency checks, but report a consistent unknown declaration using the
+    // specification's dedicated error so clients can select a supported revision.
+    if let Some(version) = header_version.as_deref() {
+        if !SUPPORTED.contains(&version) && meta_version == Some(version) {
+            return (StatusCode::BAD_REQUEST, Json(json!({"jsonrpc":"2.0","id":id,"error":{"code":-32022,"message":"Unsupported protocol version","data":{"supported":SUPPORTED,"requested":version}}}))).into_response();
         }
     }
-
-    // Managed mode: establish SSE stream
-    let session_id = get_session_id(&headers);
-
-    // Validate session exists
-    if let Some(ref sid) = session_id {
-        if state.session_manager.get_session(sid).await.is_none() {
-            return (StatusCode::NOT_FOUND, Json(json!({"error": "session not found"}))).into_response();
+    let initialize = method == "initialize";
+    let mut _session_permit = None;
+    if !modern && !initialize {
+        let Some(ref sid) = sid else {
+            return rpc_error(
+                StatusCode::BAD_REQUEST,
+                id,
+                -32001,
+                "legacy request requires initialization and Mcp-Session-Id",
+            );
+        };
+        if !owns_session(&state, sid, &slug, &principal).await {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        let session = state.session_manager.get_session(sid).await.unwrap();
+        if header_version
+            .as_deref()
+            .is_some_and(|v| v != session.protocol_version)
+        {
+            return rpc_error(
+                StatusCode::BAD_REQUEST,
+                id,
+                -32022,
+                "protocol version differs from legacy session",
+            );
+        }
+        if let Some(gate) = session.permits {
+            _session_permit = match gate.try_acquire_owned() {
+                Ok(p) => Some(p),
+                Err(_) => return StatusCode::TOO_MANY_REQUESTS.into_response(),
+            };
         }
         state.session_manager.touch_session(sid).await;
     }
-
-    // Create SSE stream channel
-    let (tx, rx) = tokio::sync::mpsc::channel::<Result<String, std::convert::Infallible>>(32);
-
-    // Send initial keepalive
-    let _ = tx.send(Ok(": keepalive\n\n".to_string())).await;
-
-    // Register SSE sender so notifications can be forwarded to this client
-    if let Some(ref sid) = session_id {
-        state.register_sse_sender(sid, tx.clone()).await;
-    }
-
-    // Spawn keepalive task; cleans up SSE sender on disconnect
-    let keep_alive_tx = tx.clone();
-    let cleanup_state = state.clone();
-    let cleanup_sid = session_id.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
-        loop {
-            interval.tick().await;
-            if keep_alive_tx.send(Ok(": keepalive\n\n".to_string())).await.is_err() {
-                // Client disconnected — clean up SSE sender
-                if let Some(ref sid) = cleanup_sid {
-                    cleanup_state.remove_sse_sender(sid).await;
+    // SDK validates per-request metadata, standard/custom headers, media types, notification
+    // semantics, version errors, resultType/cache hints, and request disconnect cancellation.
+    let mount_ct = state
+        .mount_cancellation
+        .write()
+        .await
+        .entry(slug.clone())
+        .or_insert_with(|| state.cancellation.child_token())
+        .clone();
+    let sdk_config = StreamableHttpServerConfig::default()
+        .with_legacy_session_mode(false)
+        .with_json_response(true)
+        .with_sse_keep_alive(None)
+        .with_allowed_hosts(vec![parts
+            .headers
+            .get("host")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("127.0.0.1")
+            .to_owned()])
+        .with_max_request_body_bytes(BODY_LIMIT)
+        .with_cancellation_token(mount_ct);
+    let bridge_state = state.clone();
+    let bridge_mount = mount.clone();
+    let service = StreamableHttpService::new(
+        move || {
+            Ok(Bridge {
+                state: bridge_state.clone(),
+                mount: bridge_mount.clone(),
+            })
+        },
+        Arc::new(NeverSessionManager::default()),
+        sdk_config,
+    );
+    let sdk_request = Request::from_parts(parts, Body::from(bytes));
+    let response = match service.oneshot(sdk_request).await {
+        Ok(r) => r,
+        Err(never) => match never {},
+    };
+    let mut response = response.map(Body::new);
+    if initialize && !modern && response.status().is_success() {
+        let response_bytes = match to_bytes(response.into_body(), BODY_LIMIT).await {
+            Ok(b) => b,
+            Err(_) => return StatusCode::BAD_GATEWAY.into_response(),
+        };
+        let reply: Value = serde_json::from_slice(&response_bytes).unwrap_or(Value::Null);
+        if reply.get("result").is_none() {
+            return (StatusCode::OK, Json(reply)).into_response();
+        }
+        let session = match state.session_manager.create_session(&slug).await {
+            Ok(s) => s,
+            Err(_) => return StatusCode::TOO_MANY_REQUESTS.into_response(),
+        };
+        let version = reply["result"]["protocolVersion"]
+            .as_str()
+            .unwrap_or("2025-03-26")
+            .to_owned();
+        state
+            .session_manager
+            .bind(&session.session_id, principal, version)
+            .await;
+        let child =
+            match UpstreamChild::spawn(&mount.command, mount.cwd.as_deref(), &mount.env_vars).await
+            {
+                Ok(c) => c,
+                Err(_) => {
+                    close_session(&state, &session.session_id).await;
+                    return rpc_error(
+                        StatusCode::BAD_GATEWAY,
+                        id,
+                        -32603,
+                        "upstream initialization failed; run doctor",
+                    );
                 }
-                break;
-            }
-        }
-    });
-
-    info!(slug = %slug, "SSE stream established");
-
-    // Build SSE response
-    let stream = ReceiverStream::new(rx);
-    let body = Body::from_stream(stream);
-
-    axum::response::Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "text/event-stream")
-        .header("cache-control", "no-cache")
-        .header("connection", "keep-alive")
-        .body(body)
-        .unwrap_or_else(|_| {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "failed to create SSE stream"}))).into_response()
-        })
+            };
+        state
+            .upstream_children
+            .write()
+            .await
+            .insert(session.session_id.clone(), Arc::new(child));
+        response = Json(reply).into_response();
+        response
+            .headers_mut()
+            .insert("mcp-session-id", session.session_id.parse().unwrap());
+    }
+    response
+        .headers_mut()
+        .insert("cache-control", "no-store".parse().unwrap());
+    state
+        .append_log(
+            &slug,
+            format!("method={method} status={}", response.status().as_u16()),
+        )
+        .await;
+    response
 }
 
-/// DELETE /<slug>/mcp — terminate session.
-pub async fn handle_delete_mcp(
-    State(state): State<Arc<AppState>>,
-    Path(slug): Path<String>,
-    headers: HeaderMap,
-) -> (StatusCode, Json<Value>) {
-    // Auth check
-    let mount = match state.mount_registry.get(&slug) {
-        Ok(Some(m)) => m,
-        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "mount not found"}))),
-    };
-    if mount.auth_mode == AuthModeConfig::Basic {
-        if let Err(resp) = check_basic_auth(&mount, &headers) {
-            return (resp.0, Json(resp.2));
-        }
-    }
-    if mount.auth_mode == AuthModeConfig::OAuth {
-        if let Err(challenge) = check_oauth_auth(&mount, &headers, &state).await {
-            return (challenge.0, Json(challenge.2));
-        }
-    }
+async fn owns_session(state: &AppState, sid: &str, slug: &str, principal: &str) -> bool {
+    state
+        .session_manager
+        .get_session(sid)
+        .await
+        .is_some_and(|s| s.mount_slug == slug && s.principal == principal)
+}
 
-    let session_id = match get_session_id(&headers) {
-        Some(sid) => sid,
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": "MCP-Session-Id header required"})),
-            );
-        }
-    };
-
-    // Remove upstream child
-    let child = state.upstream_children.write().await.remove(&session_id);
+pub async fn close_session(state: &AppState, sid: &str) {
+    state.session_manager.delete_session(sid).await;
+    let child = state.upstream_children.write().await.remove(sid);
     if let Some(child) = child {
-        child.shutdown().await;
-    }
-
-    // Delete session
-    match state.session_manager.delete_session(&session_id).await {
-        Some(_) => {
-            info!(
-                slug = %slug,
-                session_id_hash = %hash_session_id(&session_id),
-                "Session deleted"
-            );
-            (StatusCode::OK, Json(json!({"deleted": true})))
+        child.cancel();
+        if let Ok(child) = Arc::try_unwrap(child) {
+            child.shutdown().await;
         }
-        None => (StatusCode::NOT_FOUND, Json(json!({"error": "session not found"}))),
     }
 }
 
-/// GET /<slug>/.well-known/oauth-protected-resource
 pub async fn handle_oauth_metadata(
     State(state): State<Arc<AppState>>,
     Path(slug): Path<String>,
-) -> (StatusCode, Json<Value>) {
-    let mount = match state.mount_registry.get(&slug) {
-        Ok(Some(m)) => m,
-        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "mount not found"}))),
-    };
-
-    if mount.auth_mode != AuthModeConfig::OAuth {
-        return (StatusCode::NOT_FOUND, Json(json!({"error": "OAuth not configured for this mount"})));
-    }
-
-    let oauth = match mount.oauth_config {
-        Some(ref c) => c,
-        None => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "OAuth config missing"}))),
-    };
-
-    let tunnel_origin = state.tunnel_origin.read().await.clone()
-        .unwrap_or_else(|| "https://localhost".to_string());
-
-    let resource_url = format!("{}/{}", tunnel_origin, slug);
-
-    // For built-in mode, the AS is the mount itself
-    let authorization_servers = if oauth.builtin {
-        vec![resource_url.clone()]
-    } else {
-        oauth.authorization_servers.clone()
-    };
-
-    let metadata = crate::auth::oauth::build_protected_resource_metadata(
-        &resource_url,
-        &crate::auth::types::OAuthConfig {
-            issuer: oauth.issuer.clone(),
-            authorization_servers,
-            default_scopes: oauth.default_scopes.clone(),
-            audience: None,
-        },
-    );
-
-    (StatusCode::OK, Json(serde_json::to_value(metadata).unwrap_or_default()))
-}
-
-/// Check OAuth auth for a request. Returns Err with HTTP response tuple if auth fails.
-async fn check_oauth_auth(
-    mount: &crate::mount::types::MountRecord,
-    headers: &HeaderMap,
-    state: &Arc<AppState>,
-) -> Result<(), (StatusCode, HeaderMap, Value)> {
-    let oauth_config = match &mount.oauth_config {
-        Some(c) => c,
-        None => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                HeaderMap::new(),
-                json!({"error": "OAuth configured but no OAuth config on mount"}),
-            ));
-        }
-    };
-
-    let auth_header = headers.get("authorization")
-        .and_then(|v| v.to_str().ok());
-
-    if auth_header.is_none() {
-        // No token — return 401 with WWW-Authenticate challenge
-        let tunnel_origin = state.tunnel_origin.read().await.clone()
-            .unwrap_or_else(|| "https://localhost".to_string());
-        let resource_metadata_url = format!(
-            "{}/{}/.well-known/oauth-protected-resource",
-            tunnel_origin, mount.slug
-        );
-        let challenge = crate::auth::oauth::build_www_authenticate(
-            &resource_metadata_url,
-            &oauth_config.default_scopes,
-        );
-
-        let mut resp_headers = HeaderMap::new();
-        if let Ok(val) = challenge.parse() {
-            resp_headers.insert("www-authenticate", val);
-        }
-
-        warn!(slug = %mount.slug, "OAuth: missing bearer token");
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            resp_headers,
-            json!({"error": "authentication required"}),
-        ));
-    }
-
-    // For built-in mode, validate using the local signing key
-    // For external mode, validate using JWKS cache
-    let validation_result = if oauth_config.builtin {
-        // Built-in AS: validate with local decoding key
-        match &state.oauth_server {
-            Some(oauth_state) => {
-                let tunnel_origin = state.tunnel_origin.read().await.clone()
-                    .unwrap_or_else(|| "https://localhost".to_string());
-                let issuer = format!("{}/{}", tunnel_origin.trim_end_matches('/'), mount.slug);
-                let oauth_cfg = crate::auth::types::OAuthConfig {
-                    issuer: issuer.clone(),
-                    authorization_servers: vec![issuer.clone()],
-                    default_scopes: oauth_config.default_scopes.clone(),
-                    audience: Some(issuer),
-                };
-                crate::auth::oauth::validate_bearer_token(
-                    auth_header,
-                    &oauth_cfg,
-                    &oauth_state.signing_key.decoding_key,
-                )
-            }
-            None => Err(crate::auth::oauth::TokenValidationError::InvalidToken(
-                "OAuth server not initialized".to_string(),
-            )),
-        }
-    } else {
-        // External AS: validate with JWKS cache
-        let oauth_cfg = crate::auth::types::OAuthConfig {
-            issuer: oauth_config.issuer.clone(),
-            authorization_servers: oauth_config.authorization_servers.clone(),
-            default_scopes: oauth_config.default_scopes.clone(),
-            audience: None,
-        };
-        crate::auth::oauth::validate_bearer_token_with_cache(
-            auth_header,
-            &oauth_cfg,
-            &state.jwks_cache,
-        ).await
-    };
-
-    match validation_result {
-        Ok(claims) => {
-            // Check required scopes
-            if !crate::auth::oauth::check_scopes(&claims, &oauth_config.default_scopes) {
-                warn!(slug = %mount.slug, "OAuth: insufficient scope");
-                return Err((
-                    StatusCode::FORBIDDEN,
-                    HeaderMap::new(),
-                    json!({"error": "insufficient scope", "required_scopes": oauth_config.default_scopes}),
-                ));
-            }
-            info!(
-                slug = %mount.slug,
-                subject = claims.subject.as_deref().unwrap_or("unknown"),
-                "OAuth: token validated"
-            );
-            Ok(())
-        }
-        Err(e) => {
-            warn!(slug = %mount.slug, error = %e, "OAuth: token validation failed");
-            Err((
-                StatusCode::UNAUTHORIZED,
-                HeaderMap::new(),
-                json!({"error": format!("token validation failed: {e}")}),
-            ))
-        }
-    }
-}
-
-/// Check Basic Auth for a request. Returns Err with HTTP response tuple if auth fails.
-fn check_basic_auth(
-    mount: &crate::mount::types::MountRecord,
-    headers: &HeaderMap,
-) -> Result<(), (StatusCode, HeaderMap, Value)> {
-    let creds = match &mount.basic_credentials {
-        Some(c) => c,
-        None => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                HeaderMap::new(),
-                json!({"error": "Basic Auth configured but no credentials on mount"}),
-            ));
-        }
-    };
-
-    let auth_header = headers.get("authorization")
-        .and_then(|v| v.to_str().ok());
-
-    match crate::auth::basic::validate_basic_auth(auth_header, creds) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            warn!(slug = %mount.slug, error = %e, "Basic Auth failed");
-            let mut resp_headers = HeaderMap::new();
-            resp_headers.insert(
-                "www-authenticate",
-                "Basic realm=\"mcptunnel\"".parse().unwrap(),
-            );
-            Err((
-                StatusCode::UNAUTHORIZED,
-                resp_headers,
-                json!({"error": format!("authentication failed: {e}")}),
-            ))
-        }
-    }
-}
-
-/// Extract MCP-Session-Id from headers.
-fn get_session_id(headers: &HeaderMap) -> Option<String> {
-    headers.get("mcp-session-id")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-}
-
-/// Build a JSON-RPC success response.
-fn json_rpc_result(id: Option<Value>, result: Value) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id.unwrap_or(Value::Null),
-        "result": result,
-    })
-}
-
-/// Build a JSON-RPC error response.
-fn json_rpc_error(id: Option<Value>, code: i64, message: &str) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id.unwrap_or(Value::Null),
-        "error": {
-            "code": code,
-            "message": message,
-        },
-    })
+) -> Response {
+    crate::auth::oauth_server::handle_prm_path_based(State(state), Path(slug))
+        .await
+        .into_response()
 }

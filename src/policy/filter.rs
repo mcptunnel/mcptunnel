@@ -1,7 +1,7 @@
 use super::types::PolicyConfig;
 
 /// JSON-RPC error code for policy violations.
-pub const POLICY_VIOLATION_CODE: i64 = -32040;
+pub const POLICY_VIOLATION_CODE: i64 = -32010;
 
 /// Check if a tool name is allowed by the policy.
 pub fn is_tool_allowed(policy: &PolicyConfig, tool_name: &str) -> bool {
@@ -45,7 +45,10 @@ pub fn is_prompt_allowed(policy: &PolicyConfig, prompt_name: &str) -> bool {
 }
 
 /// Filter a list of tool descriptors, keeping only allowed ones.
-pub fn filter_tools(policy: &PolicyConfig, tools: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+pub fn filter_tools(
+    policy: &PolicyConfig,
+    tools: Vec<serde_json::Value>,
+) -> Vec<serde_json::Value> {
     tools
         .into_iter()
         .filter(|tool| {
@@ -58,14 +61,18 @@ pub fn filter_tools(policy: &PolicyConfig, tools: Vec<serde_json::Value>) -> Vec
 }
 
 /// Filter a list of resource descriptors.
-pub fn filter_resources(policy: &PolicyConfig, resources: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+pub fn filter_resources(
+    policy: &PolicyConfig,
+    resources: Vec<serde_json::Value>,
+) -> Vec<serde_json::Value> {
     if !policy.expose_resources {
         return vec![];
     }
     resources
         .into_iter()
         .filter(|resource| {
-            resource.get("name")
+            resource
+                .get("name")
                 .or_else(|| resource.get("uri"))
                 .and_then(|n| n.as_str())
                 .map(|name| is_resource_allowed(policy, name))
@@ -75,14 +82,18 @@ pub fn filter_resources(policy: &PolicyConfig, resources: Vec<serde_json::Value>
 }
 
 /// Filter a list of prompt descriptors.
-pub fn filter_prompts(policy: &PolicyConfig, prompts: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+pub fn filter_prompts(
+    policy: &PolicyConfig,
+    prompts: Vec<serde_json::Value>,
+) -> Vec<serde_json::Value> {
     if !policy.expose_prompts {
         return vec![];
     }
     prompts
         .into_iter()
         .filter(|prompt| {
-            prompt.get("name")
+            prompt
+                .get("name")
                 .and_then(|n| n.as_str())
                 .map(|name| is_prompt_allowed(policy, name))
                 .unwrap_or(true)
@@ -93,8 +104,18 @@ pub fn filter_prompts(policy: &PolicyConfig, prompts: Vec<serde_json::Value>) ->
 /// Suspicious tool name heuristics for doctor warnings.
 pub fn flag_suspicious_tools(tool_names: &[String]) -> Vec<String> {
     let suspicious_patterns = [
-        "exec", "shell", "bash", "delete", "write", "filesystem",
-        "browser", "sql", "eval", "system", "cmd", "run_command",
+        "exec",
+        "shell",
+        "bash",
+        "delete",
+        "write",
+        "filesystem",
+        "browser",
+        "sql",
+        "eval",
+        "system",
+        "cmd",
+        "run_command",
     ];
     tool_names
         .iter()

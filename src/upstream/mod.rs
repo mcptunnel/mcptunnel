@@ -1,2 +1,2 @@
-pub mod probe;
 pub mod child;
+pub mod probe;

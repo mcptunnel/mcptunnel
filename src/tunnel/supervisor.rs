@@ -9,21 +9,21 @@ pub struct CloudflaredSupervisor {
     child: Option<Child>,
     origin_rx: watch::Receiver<Option<String>>,
     origin_tx: watch::Sender<Option<String>>,
+    reader_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl CloudflaredSupervisor {
     /// Start cloudflared with the given arguments.
-    pub async fn start(
-        cloudflared_path: &str,
-        args: Vec<String>,
-    ) -> Result<Self, std::io::Error> {
+    pub async fn start(cloudflared_path: &str, args: Vec<String>) -> Result<Self, std::io::Error> {
         let (origin_tx, origin_rx) = watch::channel(None);
 
         let mut cmd = Command::new(cloudflared_path);
         cmd.args(&args)
-            .stdout(Stdio::piped())
+            .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
 
         let mut child = cmd.spawn()?;
 
@@ -31,7 +31,7 @@ impl CloudflaredSupervisor {
         let tx = origin_tx.clone();
 
         // Spawn a task to parse cloudflared output for the public URL.
-        if let Some(stderr) = stderr {
+        let reader_task = stderr.map(|stderr| {
             tokio::spawn(async move {
                 let reader = BufReader::new(stderr);
                 let mut lines = reader.lines();
@@ -42,11 +42,9 @@ impl CloudflaredSupervisor {
                         info!(url = %url, "Tunnel URL detected");
                         let _ = tx.send(Some(url));
                     }
-                    // Log cloudflared output at debug level
-                    tracing::debug!(cloudflared = %line);
                 }
-            });
-        }
+            })
+        });
 
         let pid = child.id();
         info!(pid = pid, "cloudflared started");
@@ -55,6 +53,7 @@ impl CloudflaredSupervisor {
             child: Some(child),
             origin_rx,
             origin_tx,
+            reader_task,
         })
     }
 
@@ -93,6 +92,10 @@ impl CloudflaredSupervisor {
             info!("cloudflared stopped");
         }
         self.child = None;
+        if let Some(task) = self.reader_task.take() {
+            task.abort();
+            let _ = task.await;
+        }
         let _ = self.origin_tx.send(None);
     }
 
@@ -108,7 +111,9 @@ impl CloudflaredSupervisor {
 
 impl Drop for CloudflaredSupervisor {
     fn drop(&mut self) {
-        // kill_on_drop is set, so child will be killed when dropped
+        if let Some(task) = &self.reader_task {
+            task.abort();
+        }
     }
 }
 
@@ -124,14 +129,25 @@ fn parse_tunnel_url(line: &str) -> Option<String> {
         let clean = word.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '.' && c != '/');
         let clean = clean.trim_end_matches('/');
 
-        // Accept trycloudflare.com URLs (quick tunnels)
-        if clean.contains(".trycloudflare.com") {
-            return Some(clean.to_string());
-        }
-
-        // Accept non-cloudflare domains (managed tunnels with custom hostnames)
-        if !clean.contains("cloudflare.com") {
-            return Some(clean.to_string());
+        if let Ok(url) = reqwest::Url::parse(clean) {
+            let label = url
+                .host_str()
+                .and_then(|host| host.strip_suffix(".trycloudflare.com"));
+            if url.scheme() == "https"
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.port().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.path() == "/"
+                && label.is_some_and(|l| {
+                    !l.is_empty()
+                        && l.len() <= 63
+                        && l.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
+                })
+            {
+                return Some(clean.to_string());
+            }
         }
     }
     None

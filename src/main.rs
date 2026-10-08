@@ -1,18 +1,5 @@
-mod auth;
-mod cli;
-mod config;
-mod daemon;
-mod doctor;
-mod error;
-mod gateway;
-mod logging;
-mod mount;
-mod policy;
-mod session;
-mod tunnel;
-mod upstream;
-
 use clap::Parser;
+use mcptunnel::cli;
 
 #[tokio::main]
 async fn main() {

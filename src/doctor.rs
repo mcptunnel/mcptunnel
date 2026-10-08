@@ -48,14 +48,20 @@ pub async fn run_local_doctor(config: &Config) -> Vec<DoctorCheck> {
             checks.push(DoctorCheck {
                 name: "cloudflared".to_string(),
                 status: DoctorStatus::Fail,
-                detail: format!("cloudflared returned error at '{}'", config.tunnel.cloudflared_path),
+                detail: format!(
+                    "cloudflared returned error at '{}'",
+                    config.tunnel.cloudflared_path
+                ),
             });
         }
         Err(_) => {
             checks.push(DoctorCheck {
                 name: "cloudflared".to_string(),
                 status: DoctorStatus::Fail,
-                detail: format!("cloudflared not found at '{}'", config.tunnel.cloudflared_path),
+                detail: format!(
+                    "cloudflared not found at '{}'",
+                    config.tunnel.cloudflared_path
+                ),
             });
         }
     }
@@ -110,16 +116,16 @@ pub async fn run_local_doctor(config: &Config) -> Vec<DoctorCheck> {
 
     // Check for cloudflared config.yaml that might interfere with quick tunnels
     if config.tunnel.quick_fail_if_config_yaml_present {
-        let cf_config = std::env::var("HOME").ok()
+        let cf_config = std::env::var("HOME")
+            .ok()
             .map(|h| std::path::PathBuf::from(h).join(".cloudflared/config.yaml"));
         if let Some(cf_path) = cf_config {
             if cf_path.exists() {
                 checks.push(DoctorCheck {
                     name: "cloudflared_config".to_string(),
                     status: DoctorStatus::Warn,
-                    detail: format!(
-                        "~/.cloudflared/config.yaml exists; may interfere with quick tunnels"
-                    ),
+                    detail: "~/.cloudflared/config.yaml exists; may interfere with quick tunnels"
+                        .to_string(),
                 });
             }
         }
