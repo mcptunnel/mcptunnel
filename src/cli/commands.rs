@@ -92,7 +92,11 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
         display_name: args.name,
         program: program.clone(),
         args: cmd_args.to_vec(),
-        cwd: args.cwd,
+        cwd: args.cwd.or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|path| path.to_string_lossy().into_owned())
+        }),
         tunnel_mode: args.tunnel,
         hostname: args.hostname,
         auth_mode: args.auth,

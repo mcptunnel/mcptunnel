@@ -8,4 +8,4 @@ Verification first: establish the baseline, use a real legacy stdio fixture behi
 4. Add real process/HTTP regressions, official conformance fixture/runner, platform CI and packaging. Record actual results without baselines hiding failures.
 5. Update README, protocol audit, compatibility matrix, tunnel plans and engineering report. Commit coherent verified work items with version bumps.
 
-Status: research and baseline complete; implementation in progress.
+Status: complete for the supported synchronous scope. fmt, strict Clippy, 63 tests, release build, isolated installation and source package verification PASS. Supported conformance subset: 50 scenarios PASS; both full sets executed and their unsupported interactive/extension failures retained. Account-backed E2E, hosted OAuth/provider tests, managed backend and non-Windows CI are explicitly unverified/unavailable. See ENGINEERING_REPORT.md for actual results and P0/P1/P2 priorities.

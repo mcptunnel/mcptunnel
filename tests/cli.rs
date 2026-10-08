@@ -37,6 +37,7 @@ fn portable_daemon_ipc_and_fail_closed_configuration() {
     };
     let mut daemon = Process(
         command()
+            .current_dir(temp.path())
             .args(["daemon", "start"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -58,7 +59,7 @@ fn portable_daemon_ipc_and_fail_closed_configuration() {
         assert!(Instant::now() < deadline, "daemon IPC never became ready");
         std::thread::sleep(Duration::from_millis(50));
     }
-    let fixture = format!("{}/tests/fixtures/legacy.cjs", env!("CARGO_MANIFEST_DIR"));
+    let fixture = "tests/fixtures/legacy.cjs".to_string();
     let created = command()
         .args([
             "run", "--slug", "test", "--tunnel", "local", "--auth", "basic", "--json", "--",

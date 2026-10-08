@@ -44,5 +44,7 @@ const entry = path.join(dir, 'mcptunnel-stdio-fixture.ts');
 fs.writeFileSync(entry, projection);
 const { build } = await import(pathToFileURL(path.join(root, 'node_modules/esbuild/lib/main.js')));
 const output = path.join(dir, 'mcptunnel-stdio-fixture.mjs');
-await build({entryPoints:[entry],outfile:output,bundle:true,platform:'node',format:'esm',packages:'external',logLevel:'warning'});
+// Resolve the existing dependency graph once, not at every isolated process start.
+// Keep the official checks and their fixed response deadlines unchanged.
+await build({entryPoints:[entry],outfile:output,bundle:true,platform:'node',format:'esm',banner:{js:"import { createRequire as fixtureCreateRequire } from 'node:module'; const require = fixtureCreateRequire(import.meta.url);"},logLevel:'warning'});
 console.log(output);

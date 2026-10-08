@@ -1,272 +1,125 @@
 # mcptunnel
 
-A local MCP gateway that turns any **stdio MCP server** into a **public HTTPS endpoint** — one command, one tunnel, multiple servers.
+Bridge a local stdio MCP server to Streamable HTTP. Modern clients can invoke legacy stdio tools without initializing a remote session; legacy clients retain isolated initialization sessions.
 
-```bash
-mcptunnel -- npx -y ollama-mcp
-```
+**Free Quick mode uses temporary random URLs and synchronous JSON. Basic authentication is the default. Official managed stable hosting is unavailable until a trusted paid provisioning service exists.**
 
-```
-Mount created: ollama
-Tunnel mode: quick
-Auth mode: public
-Public MCP URL:
-https://bold-leaf-42.trycloudflare.com/ollama/mcp
-```
+## Install and free quick start
 
-Paste the URL into [ChatGPT](https://chatgpt.com), [Claude Desktop](https://claude.ai), or any MCP client. Done.
+Requirements: Rust 1.88+, your stdio server runtime, and [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/). Node 22+ is needed for repository tests and the demo fixture.
 
-## Why
-
-You have a local MCP server. You want to share it over the internet — maybe with ChatGPT, maybe with a teammate, maybe with yourself from another machine. You don't want to set up nginx, deal with certificates, or write a proxy.
-
-mcptunnel handles:
-
-- Spawning and probing your MCP server
-- Running a local HTTP gateway that speaks MCP Streamable HTTP
-- Managing a Cloudflare Tunnel for public HTTPS
-- Routing multiple servers through one tunnel
-- Session isolation (one child process per remote session)
-- Tool/resource/prompt policy filtering
-- Optional OAuth endpoint protection
-
-## Install
-
-### From source
-
-```bash
-git clone https://github.com/flrngel/mcptunnel.git
+```sh
+git clone https://github.com/mcptunnel/mcptunnel.git
 cd mcptunnel
-cargo install --path .
+cargo install --locked --path .
+mcptunnel -- node tests/fixtures/legacy.cjs
 ```
 
-### Prerequisites
+Replace `node tests/fixtures/legacy.cjs` with your installed stdio server command. The daemon starts automatically, probes the server, and opens a free Quick Tunnel. The demo is a deterministic test fixture, not a production tool service.
 
-- [Rust](https://rustup.rs/) 1.75+
-- [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) installed and on PATH
+Creation prints a plain `https://<random>.trycloudflare.com/<slug>/mcp` URL and an `Authorization: Basic ...` header once. Save the header privately. Inspection does not reveal credentials; recreate a Basic mount if you lose them. `--json` creation also contains credentials and must be stored privately. A pending URL means the provider has not announced an origin; inspect `mcptunnel tunnel status` and `mcptunnel doctor`.
 
-## Quick start
+Use the complete `/slug/mcp` URL and the creation header in a client supporting HTTP headers. Do not put credentials in URL userinfo. ChatGPT Basic support is unverified; use its documented external OAuth or explicit no-auth flow. Claude documents fixed Authorization headers for limited beta organizations. Actual client tests remain NOT TESTED. See [copy/paste client configurations and the evidence matrix](docs/CLIENT_COMPATIBILITY.md).
 
-### Expose a single MCP server
+Windows: use `node`, an absolute executable path, or the full `npx.cmd` path when a package launcher is not found. The mount captures the creating CLI's working directory; `--cwd` overrides it. The daemon uses a local named pipe on Windows and a restricted Unix socket on Linux/macOS.
 
-```bash
-mcptunnel -- npx -y ollama-mcp
-```
+No binary release or registry publication was performed by this modernization. CI produces build artifacts; source installation is the verified installation path.
 
-The daemon starts automatically, creates a Cloudflare quick tunnel, probes the MCP server, and prints the public URL.
+## Register, restrict, inspect, stop
 
-### Expose multiple servers on one tunnel
-
-```bash
-mcptunnel --slug painter -- npx -y @anthropic/mcp-painter
-mcptunnel --slug search  -- npx -y @anthropic/mcp-search
-```
-
-Both share the same tunnel and hostname:
-
-```
-https://<random>.trycloudflare.com/painter/mcp
-https://<random>.trycloudflare.com/search/mcp
-```
-
-### Check what's running
-
-```bash
+```sh
+mcptunnel run --slug demo --allow-tool echo -- node tests/fixtures/legacy.cjs
 mcptunnel list
+mcptunnel inspect demo
+mcptunnel doctor demo --json
+mcptunnel logs demo
+mcptunnel stop demo
+mcptunnel daemon stop --force
 ```
 
-```
-SLUG             STATUS     TUNNEL   AUTH     SESS TOOLS URL
-painter          ready      quick    public   0    3     https://bold-leaf-42.trycloudflare.com/painter/mcp
-search           ready      quick    public   0    5     https://bold-leaf-42.trycloudflare.com/search/mcp
-```
+All mounts share the daemon's provider. Deny rules override allow rules. `--hide-resources` and `--hide-prompts` block discovery and invocation; completion requests honor these policies too. Logs contain sanitized methods/statuses, not upstream stderr, credentials, request arguments, or tool output.
 
-### Inspect a mount
+An intentionally public endpoint is explicit:
 
-```bash
-mcptunnel inspect painter
+```sh
+mcptunnel run --slug public-demo --auth public --allow-tool echo -- node tests/fixtures/legacy.cjs
 ```
 
-### View logs
+Anyone with that URL can invoke the exposed operations. Public mode is not selected automatically for client compatibility.
 
-```bash
-mcptunnel logs painter
-mcptunnel logs painter --follow
+## Protocol and limits
+
+| Connection | Implemented behavior |
+|---|---|
+| 2026-07-28 | Per-request version/client capabilities metadata, `server/discover`, no mandatory initialize or protocol session ID |
+| 2025-11-25 / 2025-06-18 / 2025-03-26 | Initialize, returned session ID, mount/principal binding, session cleanup |
+| Modern HTTP to legacy stdio | SDK discovery/initialization negotiation; typed request adaptation; preserved schemas, content, structured content, pagination, errors and relevant metadata |
+| Quick Tunnel | Synchronous JSON only; progress suppressed; temporary random origin |
+| Independently hosted local mode | JSON and request-scoped progress SSE; proxy must support streaming |
+
+Modern operations spawn an isolated stdio process per request. Legacy sessions reuse one process each. This protects user/session state at the cost of process startup on every modern operation. Upstream processes run with the operator's permissions; the gateway is not an OS sandbox. Process groups/jobs terminate descendants during cleanup.
+
+Limits: 1 MiB HTTP body, 10-second body timeout, 4 MiB stdio message, 15-second startup, 60-second request, 64 global requests, default 8 requests per mount/session, default 8 sessions per mount, and 256 sessions globally. Discovery is bounded to 4,096 entries, 64 pages and 16 MiB per catalog. Request timeout and SSE disconnect cancellation are verified. Reinitialize a legacy session after its upstream crashes.
+
+Tasks, subscriptions/replay, interactive MRTR, sampling/elicitation callbacks, logging, and MCP Apps are unsupported. They are not advertised. GET subscription streams return 405. No deprecated HTTP+SSE transport is added. Independent request-scoped progress does not imply subscription or interactive support.
+
+The gateway passes the explicitly selected supported conformance subset. **Full conformance does not pass:** current scored checks are 93 pass/10 fail, previous stable checks 53 pass/8 fail. Remaining failures concern interactive MRTR and unimplemented logging/callback/subscription scenarios. [Exact results and reproducible commands](docs/ENGINEERING_REPORT.md) are retained; this is not full protocol certification.
+
+## External OAuth
+
+The insecure built-in authorization server has been removed. Existing built-in OAuth and inherit-auth mounts fail closed. Recreate them with Basic, explicit public mode, or an external issuer:
+
+```sh
+mcptunnel run --slug private --auth oauth --oidc-issuer https://issuer.example --scope read -- node tests/fixtures/legacy.cjs
 ```
 
-### Stop a mount
+Configure your authorization server to issue **RS256 JWT access tokens** whose audience is the exact current full MCP URL. Issuer, subject, audience, expiration, not-before and scopes are validated. Discovery/JWKS uses HTTPS, bounded documents and issuer-scoped cached keys. Tokens never enter stdio parameters or environment variables.
 
-```bash
-mcptunnel stop painter
-```
+Protected-resource metadata is available at `/.well-known/oauth-protected-resource/<slug>/mcp`. Your external authorization server owns PKCE, CIMD/registration, consent and refresh tokens. Signing/registration persistence is its responsibility. Tokens for a former Quick URL are rejected after a URL change. Opaque tokens, introspection, other signing algorithms, and an embedded login service are not implemented. Local JWT/HTTP checks pass; external browser authorization and account-backed connector flows remain NOT TESTED.
 
-### Run diagnostics
+## Independent hosting and paid managed hosting
 
-```bash
-mcptunnel doctor
-mcptunnel doctor painter
-```
-
-## Tunnel modes
-
-### Quick (default)
-
-```bash
-mcptunnel -- npx -y my-mcp-server
-```
-
-- Zero setup — just needs `cloudflared` installed
-- Random `*.trycloudflare.com` subdomain
-- No SSE support (POST/DELETE only)
-- URL changes on restart
-- For **development and testing**
-
-### Managed
-
-```bash
-mcptunnel run \
-  --tunnel managed \
-  --hostname mcp.example.com \
-  --slug painter \
-  -- npx -y my-mcp-server
-```
-
-- Stable hostname with your own domain
-- Full SSE streaming support
-- Requires `cloudflared` login and tunnel setup
-- For **production and sustained use**
-
-## Security
-
-### Policy filtering
-
-Control which tools, resources, and prompts are exposed:
-
-```bash
-# Only expose specific tools
-mcptunnel run --allow-tool paint.draw --allow-tool paint.fill -- npx -y mcp-painter
-
-# Block dangerous tools
-mcptunnel run --deny-tool exec --deny-tool shell -- npx -y my-server
-
-# Hide resources and prompts entirely
-mcptunnel run --hide-resources --hide-prompts -- npx -y my-server
-```
-
-Policy is enforced at both **listing time** and **invocation time** — denied tools don't appear in `tools/list` and direct `tools/call` attempts are rejected without forwarding upstream.
-
-### Auth modes
-
-| Mode | Flag | Behavior |
-|------|------|----------|
-| **public** (default) | `--auth public` | No auth. Prominent warning printed. |
-| **inherit** | `--auth inherit` | Preserves upstream auth metadata as-is. |
-| **oauth** | `--auth oauth` | Gateway-managed OAuth with JWT validation. |
-
-### OAuth example
-
-```bash
-mcptunnel run \
-  --auth oauth \
-  --oidc-issuer https://auth.example.com \
-  --scope painter.use \
-  --tunnel managed \
-  --hostname mcp.example.com \
-  -- npx -y mcp-painter
-```
-
-- Validates JWT signatures via JWKS auto-discovery
-- Checks issuer, audience, expiry, and scopes
-- Returns `401` + `WWW-Authenticate` for unauthenticated requests
-- Exposes `/.well-known/oauth-protected-resource` metadata
-
-## Architecture
-
-```
-CLI (clap) ──> Daemon ──> HTTP Gateway (axum)
-                 │              │
-                 │         /<slug>/mcp ──> Session Manager ──> Upstream Adapter (rmcp)
-                 │                                                    │
-                 │                                              stdio MCP child
-                 │
-                 ├── Mount Registry (SQLite)
-                 ├── Tunnel Manager (cloudflared)
-                 ├── Policy / Auth Overlay
-                 └── Admin API (Unix Domain Socket)
-```
-
-- **Single binary** — daemon forks from the same `mcptunnel` binary
-- **One tunnel, many mounts** — path-prefix routing (`/<slug>/mcp`)
-- **One child per session** — each remote MCP session gets its own stdio child process
-- **Loopback only** — daemon binds `127.0.0.1`, Cloudflare handles public exposure
-
-## CLI reference
-
-| Command | Description |
-|---------|-------------|
-| `mcptunnel -- <cmd>` | Mount a server (shorthand for `run`) |
-| `mcptunnel run [opts] -- <cmd>` | Mount with options |
-| `mcptunnel list [--json]` | List all mounts |
-| `mcptunnel inspect <slug> [--json]` | Detailed mount info |
-| `mcptunnel logs <slug> [--follow]` | View mount logs |
-| `mcptunnel stop <slug>` | Stop a mount |
-| `mcptunnel doctor [slug] [--json]` | Run diagnostics |
-| `mcptunnel daemon status` | Show daemon state |
-| `mcptunnel daemon start` | Start daemon in foreground |
-| `mcptunnel daemon stop` | Stop daemon |
-| `mcptunnel tunnel status` | Show tunnel state |
-| `mcptunnel gc` | Clean up stale state |
-
-All list/inspect/doctor/status commands support `--json` for scripting.
-
-## Configuration
-
-Optional config file at `~/.config/mcptunnel/config.toml`:
+For your own reverse proxy/domain, use a configuration file:
 
 ```toml
 [daemon]
 bind = "127.0.0.1:43123"
-auto_start = true
-
 [tunnel]
-default_mode = "quick"
-cloudflared_path = "cloudflared"
-
-[defaults]
-auth_mode = "public"
-session_idle_ttl = "15m"
-session_hard_ttl = "12h"
-max_sessions_per_mount = 8
-log_level = "info"
+default_mode = "local"
+external_origin = "https://mcp.your-domain.example"
 ```
 
-## How it works
+Point `MCPTUNNEL_CONFIG` at this file, restart the daemon, and create mounts with `--tunnel local`. Route your HTTPS origin to the loopback bind, preserving Host/auth/MCP headers and disabling proxy buffering for SSE. Recreate mounts when changing their transport mode. `MCPTUNNEL_STATE_DIR` optionally isolates state; otherwise `doctor` reports platform paths. Invalid configuration fails closed.
 
-1. You run `mcptunnel -- <your mcp server command>`
-2. The daemon auto-starts if not running
-3. A Cloudflare quick tunnel starts, giving you a public HTTPS URL
-4. Your command is probed to verify it speaks MCP
-5. A mount is created at `/<slug>/mcp`
-6. When a remote client POSTs to the public URL:
-   - A new session is created
-   - A child process is spawned running your command
-   - MCP requests are bridged between HTTP and stdio
-   - The session ID is returned in `MCP-Session-Id`
-7. Idle sessions are evicted after 15 minutes
+Independent infrastructure is allowed by the MIT license and needs no mcptunnel account or plan. Quick mode rejects `external_origin` and hostname assignment. Official `--tunnel managed` fails with an unavailable-backend error: a local plan flag cannot prove paid entitlement. [Tunnel architecture and future server-side provision/renew/revoke boundary](docs/TUNNEL_PLANS.md).
 
-## Exit codes
+Cloudflare documents Quick Tunnels as development-only and without SSE. URLs change on restart/reconnect, clients need the replacement URL, and there is no uptime guarantee. Live public Quick connectivity was not exercised in this task. [Provider documentation](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
 
-| Code | Meaning |
-|------|---------|
-| `0` | Success |
-| `2` | CLI usage error |
-| `10` | Daemon unavailable |
-| `11` | cloudflared missing |
-| `12` | Tunnel creation failed |
-| `20` | Upstream spawn failed |
-| `21` | Upstream probe failed |
-| `22` | Mount not found |
+## Troubleshooting
 
-## License
+| Symptom | Action |
+|---|---|
+| 400 / -32020 | Match protocol/method/name/annotated parameter headers to the body; current requests require per-request `_meta` |
+| 400 / -32022 | Select one of the four supported revisions; keep the negotiated legacy session version |
+| 401 | Supply the creation Basic header or a valid resource-bound external JWT; do not use credential URLs |
+| 403 | Check Host/Origin and required OAuth scopes |
+| JSON-RPC -32010 | The mount policy denies this operation; check allow/deny and resource/prompt settings |
+| 404 | Use the full mount URL; reinitialize an expired legacy session; check unsupported method names |
+| 405 / 406 / 415 | GET subscriptions are unsupported; POST accepts JSON plus SSE in Accept and requires application/json Content-Type |
+| 429 | Reduce active requests/sessions or review configured limits |
+| Missing provider URL | Run doctor/tunnel status; install cloudflared and check network access |
+| Upstream failure | Verify executable path, cwd/env and clean JSON-RPC stdout; use eager probing or doctor |
+| OAuth reconnect fails | Authorize for the replacement Quick resource URL; verify AS PKCE/CIMD/registration configuration |
 
-MIT
+## Verification and contributing
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets
+cargo build --release
+```
+
+Tests include real HTTP/stdio processes, Windows IPC, process-tree cleanup, and the real 60-second timeout. CI runs these checks on Linux, macOS and Windows and the supported official conformance subset on Linux. Linux/macOS CI execution and account-backed clients remain unverified until those runs occur.
+
+See [research](docs/RESEARCH.md), [protocol/security audit](docs/PROTOCOL_AUDIT.md), [client compatibility](docs/CLIENT_COMPATIBILITY.md), and [engineering report](docs/ENGINEERING_REPORT.md). Licensed under [MIT](LICENSE).

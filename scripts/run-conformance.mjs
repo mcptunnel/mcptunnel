@@ -3,7 +3,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
-const source = path.resolve(process.argv[2] ?? 'target/conformance-source');
+const source = path.resolve(process.argv.slice(2).find(arg=>!arg.startsWith('--')) ?? 'target/conformance-source');
 const full = process.argv.includes('--full');
 const pin = 'c37eec888e1c6ff140af79987a40008548b7cc5f';
 if (execFileSync('git',['rev-parse','HEAD'],{cwd:source,encoding:'utf8'}).trim() !== pin) throw new Error('Conformance source must match the documented pin');

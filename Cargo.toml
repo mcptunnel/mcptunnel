@@ -1,6 +1,6 @@
 [package]
 name = "mcptunnel"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "A local MCP gateway that bridges stdio MCP servers to public HTTPS endpoints via Cloudflare Tunnel"
 license = "MIT"
@@ -19,6 +19,7 @@ clap = { version = "4", features = ["derive"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+process-wrap = { version = "10.0.1", features = ["tokio1"] }
 
 # HTTP server
 axum = { version = "0.8", features = ["macros"] }

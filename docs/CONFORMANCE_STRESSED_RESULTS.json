@@ -1,0 +1,2066 @@
+{
+  "retrieved": "2026-10-08",
+  "sdk": "rmcp 3.5.1",
+  "conformanceCommit": "c37eec888e1c6ff140af79987a40008548b7cc5f",
+  "runDirectory": "full-2026-10-08T19-41-10.786Z",
+  "fixture": "Official reusable everything-server factory projected to stdio; noninteractive capability, logging-suppression and header diagnostics added. MRTR/Tasks diagnostics absent/unsupported.",
+  "snapshots": [
+    {
+      "revision": "2026-07-28",
+      "total": {
+        "passed": 140,
+        "failed": 37,
+        "warnings": 4,
+        "skipped": 6,
+        "info": 1
+      },
+      "scored": {
+        "passed": 91,
+        "failed": 12,
+        "warnings": 4,
+        "skipped": 5,
+        "info": 1
+      },
+      "scenarios": [
+        {
+          "scenario": "caching",
+          "scored": true,
+          "passed": 8,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2549-tools-list-caching-hints",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2549-prompts-list-caching-hints",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2549-resources-list-caching-hints",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2549-resources-templates-list-caching-hints",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2549-resources-read-caching-hints",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2549-ttl-non-negative",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2549-cache-scope-valid",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "completion-complete",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "completion-complete",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "dns-rebinding-protection",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "localhost-host-rebinding-rejected",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "localhost-host-valid-accepted",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "http-custom-header-server-validation",
+          "scored": false,
+          "passed": 10,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2243-server-decode-base64",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-invalid-param-chars",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-param-mismatch",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-invalid-param-chars",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-param-mismatch",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-validate-param-match",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-validate-param-match",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-validate-param-match",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-param-mismatch",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "http-header-validation",
+          "scored": false,
+          "passed": 14,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2243-server-reject-invalid-headers",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-error-code",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-invalid-headers",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-error-code",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-invalid-headers",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-error-code",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-accepts-whitespace-header-value",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-invalid-headers",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-error-code",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-header-name-case-insensitive",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-header-name-case-insensitive",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-invalid-headers",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2243-server-reject-error-code",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-basic-elicitation",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-elicitation-incomplete",
+              "status": "FAILURE",
+              "errorMessage": "Expected InputRequiredResult but got a complete result. Server should return resultType: \"input_required\" with inputRequests."
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-basic-list-roots",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-list-roots-incomplete",
+              "status": "FAILURE",
+              "errorMessage": "Expected InputRequiredResult with roots/list inputRequest"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-basic-sampling",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-sampling-incomplete",
+              "status": "FAILURE",
+              "errorMessage": "Expected InputRequiredResult with sampling inputRequest"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-capability-check",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-respect-client-capabilities",
+              "status": "FAILURE",
+              "errorMessage": "Server returned complete result; expected InputRequiredResult with sampling-only inputRequests"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-ignore-extra-params",
+          "scored": true,
+          "passed": 1,
+          "failed": 0,
+          "warnings": 1,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-ignore-unexpected-params",
+              "status": "WARNING",
+              "errorMessage": "Server returned JSON-RPC error when extra params were included: MRTR continuations are not supported by this bridge. Servers SHOULD ignore unrecognized information."
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-missing-input-response",
+          "scored": true,
+          "passed": 1,
+          "failed": 0,
+          "warnings": 1,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-missing-response-rerequests",
+              "status": "WARNING",
+              "errorMessage": "Server returned JSON-RPC error instead of re-requesting via InputRequiredResult. SEP-2322 recommends servers re-request missing information."
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-multi-round",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-multi-round-r1",
+              "status": "FAILURE",
+              "errorMessage": "Expected InputRequiredResult with inputRequests and requestState"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-multiple-input-requests",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-multiple-inputs-incomplete",
+              "status": "FAILURE",
+              "errorMessage": "Expected InputRequiredResult"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-non-tool-request",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-non-tool-incomplete",
+              "status": "FAILURE",
+              "errorMessage": "JSON-RPC error: MCP error -32602: Prompt test_input_required_result_prompt not found"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-request-state",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-request-state-incomplete",
+              "status": "FAILURE",
+              "errorMessage": "Expected InputRequiredResult"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-result-type",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-result-type-included",
+              "status": "FAILURE",
+              "errorMessage": "Expected resultType \"input_required\", got \"complete\""
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-tampered-state",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-reject-tampered-state",
+              "status": "FAILURE",
+              "errorMessage": "Prerequisite failed: could not get initial InputRequiredResult with requestState"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-unsupported-methods",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-not-on-unsupported-requests",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "input-required-result-validate-input",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 1,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2322-validate-input-responses",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2322-error-on-protocol-error",
+              "status": "WARNING",
+              "errorMessage": "Server accepted null inputResponses and returned complete result. Protocol errors SHOULD return a JSON-RPC error response."
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "json-schema-2020-12",
+          "scored": false,
+          "passed": 8,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "json-schema-2020-12-tool-found",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "json-schema-2020-12-$schema",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "json-schema-2020-12-$defs",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "json-schema-2020-12-additionalProperties",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2106-composition-keywords-preserved",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2106-conditional-keywords-preserved",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2106-anchor-keyword-preserved",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-get-embedded-resource",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-get-embedded-resource",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-get-simple",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-get-simple",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-get-with-args",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-get-with-args",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-get-with-image",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-get-with-image",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-list",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-list",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-list",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-list",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-read-binary",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-read-binary",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-read-text",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-read-text",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-templates-read",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-templates-read",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "sep-2164-resource-not-found",
+          "scored": true,
+          "passed": 3,
+          "failed": 0,
+          "warnings": 1,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2164-no-empty-contents",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2164-error-code",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2164-data-uri",
+              "status": "WARNING",
+              "errorMessage": "Error data.uri is undefined, expected \"test://nonexistent-resource-for-conformance-testing\". This is a SHOULD requirement."
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "server-sse-multiple-streams",
+          "scored": true,
+          "passed": 1,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 1,
+          "checks": [
+            {
+              "id": "server-accepts-multiple-post-streams",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "server-sse-streams-functional",
+              "status": "INFO"
+            }
+          ]
+        },
+        {
+          "scenario": "server-stateless",
+          "scored": true,
+          "passed": 23,
+          "failed": 2,
+          "warnings": 0,
+          "skipped": 5,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2575-request-meta-invalid-missing-meta",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-meta-invalid-400",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-request-meta-invalid-missing-protocol-version",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-meta-invalid-400",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-request-meta-invalid-missing-client-capabilities",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-meta-invalid-400",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-request-meta-client-info-optional",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-server-implements-discover",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-server-identifies-in-result-meta",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-server-declares-prompts-in-discover",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-discover-capabilities-match-handlers",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-server-unsupported-version-error",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-unsupported-version-400",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-header-mismatch-400",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-server-rejects-undeclared-capability",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-missing-capability-http-400",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-method-not-found-404-initialize",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-method-not-found-404-ping",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-method-not-found-404-logging-setlevel",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-method-not-found-404-resources-subscribe",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-method-not-found-404-resources-unsubscribe",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-method-not-found-404",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2575-http-server-no-independent-requests-on-stream",
+              "status": "FAILURE",
+              "errorMessage": "Failed to receive progressive stream chunk execution frames from tools/call handler endpoint"
+            },
+            {
+              "id": "sep-2575-server-no-log-without-loglevel",
+              "status": "FAILURE",
+              "errorMessage": "Logging target endpoint context dropped or failed to yield frame structures"
+            },
+            {
+              "id": "sep-2575-server-sends-subscription-ack",
+              "status": "SKIPPED"
+            },
+            {
+              "id": "sep-2575-server-tags-subscription-id",
+              "status": "SKIPPED"
+            },
+            {
+              "id": "sep-2575-server-honors-notification-filter",
+              "status": "SKIPPED"
+            },
+            {
+              "id": "sep-2575-server-sends-prompts-list-changed-on-subscription",
+              "status": "SKIPPED"
+            },
+            {
+              "id": "sep-2575-server-sends-tools-list-changed-on-subscription",
+              "status": "SKIPPED"
+            },
+            {
+              "id": "sep-2575-http-server-error-jsonrpc-id",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-capability-negotiation",
+          "scored": false,
+          "passed": 2,
+          "failed": 3,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tasks-extension-advertised",
+              "status": "FAILURE",
+              "errorMessage": "capabilities.extensions MUST be advertised"
+            },
+            {
+              "id": "sep-2663-tasks-methods-non-declaring",
+              "status": "FAILURE",
+              "errorMessage": "tasks/get MUST return -32021; got -32601; tasks/update MUST return -32021; got -32601; tasks/cancel MUST return -32021; got -32601"
+            },
+            {
+              "id": "sep-2663-server-rejects-undeclared-client",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "tasks-per-request-meta-opt-in",
+              "status": "FAILURE",
+              "errorMessage": "expected resultType:\"task\" via per-request opt-in; got \"complete\"; per-request opt-in MUST produce a CreateTaskResult with top-level taskId"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-dispatch-and-envelope",
+          "scored": false,
+          "passed": 6,
+          "failed": 3,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2663-tasks-result-removed-method-not-found",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "tasks-removed-tasks-list",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "tasks-server-directed-creation-no-hint",
+              "status": "FAILURE",
+              "errorMessage": "expected CreateTaskResult; got resultType=\"complete\", taskId=undefined"
+            },
+            {
+              "id": "sep-2663-legacy-task-param-ignored",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "tasks-immediate-result-shortcut",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "tasks-result-type-complete-on-non-task-responses",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2663-durable-create-strong-consistency",
+              "status": "FAILURE",
+              "errorMessage": "slow_compute did not create a task"
+            },
+            {
+              "id": "sep-2663-tasks-get-invalid-task-id-32602",
+              "status": "FAILURE",
+              "errorMessage": "expected -32602; got -32601 (if the server is otherwise compliant, verify it does not validate other dimensions — routing headers, _meta, params shape — before method dispatch)"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-lifecycle",
+          "scored": false,
+          "passed": 2,
+          "failed": 7,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tasks-sync-tool-call",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2663-result-type-task-on-create",
+              "status": "FAILURE",
+              "errorMessage": "expected resultType:\"task\"; got \"complete\"; CreateTaskResult MUST carry top-level taskId; CreateTaskResult MUST carry top-level status; createdAt MUST be an ISO-8601 string; got undefined; lastUpdatedAt MUST be an ISO-8601 string; got undefined"
+            },
+            {
+              "id": "sep-2663-tasks-get-status-working",
+              "status": "FAILURE",
+              "errorMessage": "Not testable: no task was created by the preceding step, so this check could not be exercised"
+            },
+            {
+              "id": "sep-2663-tasks-get-status-completed",
+              "status": "FAILURE",
+              "errorMessage": "Not testable: no task was created by the preceding step, so this check could not be exercised"
+            },
+            {
+              "id": "sep-2663-tool-error-uses-completed-status",
+              "status": "FAILURE",
+              "errorMessage": "failing_job MUST create a task"
+            },
+            {
+              "id": "sep-2663-tasks-get-status-failed",
+              "status": "FAILURE",
+              "errorMessage": "protocol_error_job MUST create a task"
+            },
+            {
+              "id": "sep-2663-cancel-ack-empty-result",
+              "status": "FAILURE",
+              "errorMessage": "slow_compute did not create a task"
+            },
+            {
+              "id": "tasks-cancel-terminal-idempotent-ack",
+              "status": "FAILURE",
+              "errorMessage": "slow_compute did not create a task"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-mrtr-composition",
+          "scored": false,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2663-mrtr-synchronous-before-task-creation",
+              "status": "FAILURE",
+              "errorMessage": "round 1 MUST be InputRequiredResult; got {\"resultType\":\"complete\",\"content\":[{\"type\":\"text\",\"text\":\"MCP error -32602: Tool test_tool_with_task not found\"}],\"isError\":true,\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"mcptunnel\",\"version\":\"0.2.2\"}}}; round 1 resultType MUST be \"input_required\"; got \"complete\"; round 1 missing inputRequests; cannot drive round 2"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-mrtr-input",
+          "scored": false,
+          "passed": 1,
+          "failed": 3,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2663-tasks-get-status-input-required",
+              "status": "FAILURE",
+              "errorMessage": "confirm_delete did not create a task"
+            },
+            {
+              "id": "tasks-mrtr-tasks-update-resumes",
+              "status": "FAILURE",
+              "errorMessage": "confirm_delete did not create a task"
+            },
+            {
+              "id": "tasks-mrtr-partial-fulfillment",
+              "status": "FAILURE",
+              "errorMessage": "multi_input did not create a task"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-request-headers",
+          "scored": false,
+          "passed": 2,
+          "failed": 3,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tasks-headers-tolerate-mcp-method-on-tools-call",
+              "status": "FAILURE",
+              "errorMessage": "tool result content MUST be unaffected by the Mcp-Method header"
+            },
+            {
+              "id": "sep-2663-routing-headers-accepted-on-tasks-get",
+              "status": "FAILURE",
+              "errorMessage": "slow_compute did not create a task"
+            },
+            {
+              "id": "tasks-headers-reject-mismatched-method",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2663-server-rejects-mismatched-mcp-name-on-tasks-get",
+              "status": "FAILURE",
+              "errorMessage": "routing-task fixture from Check 2 unavailable; cannot drive negative-path probe"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-request-state-removal",
+          "scored": false,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tasks-request-state-removal-setup",
+              "status": "FAILURE",
+              "errorMessage": "no taskId in tools/call response"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-required-task-error",
+          "scored": false,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "sep-2663-server-returns-missing-capability-when-required",
+              "status": "FAILURE",
+              "errorMessage": "tools/call for failing_job returned a successful response from a client that did not declare io.modelcontextprotocol/tasks; spec requires -32021 rejection in this case."
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-status-notifications",
+          "scored": false,
+          "passed": 0,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 1,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tasks-status-notifications",
+              "status": "SKIPPED",
+              "errorMessage": "Skipped: SEP-2663 delivers notifications/tasks via the SEP-2575 subscriptions/listen stream, not via the tools/call POST SSE response that the prior harness observed. The harness needs a rewrite against the new channel; tracked as a follow-up."
+            }
+          ]
+        },
+        {
+          "scenario": "tasks-wire-fields",
+          "scored": false,
+          "passed": 1,
+          "failed": 3,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tasks-wire-field-renames",
+              "status": "FAILURE",
+              "errorMessage": "CreateTaskResult MUST carry ttlMs (renamed from v1 `ttl`)"
+            },
+            {
+              "id": "tasks-no-early-ttl-expiry",
+              "status": "FAILURE",
+              "errorMessage": "Not testable: no task was created by the preceding step, so this check could not be exercised"
+            },
+            {
+              "id": "tasks-no-related-task-meta-on-inlined-result",
+              "status": "FAILURE",
+              "errorMessage": "Not testable: no task was created by the preceding step, so this check could not be exercised"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-audio",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-audio",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-embedded-resource",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-embedded-resource",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-error",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-error",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-image",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-image",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-mixed-content",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-mixed-content",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-simple-text",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-simple-text",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-with-progress",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-with-progress",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-list",
+          "scored": true,
+          "passed": 4,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-list",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "tools-name-format",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "tools-list-deterministic-order",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "revision": "2025-11-25",
+      "total": {
+        "passed": 64,
+        "failed": 8,
+        "warnings": 0,
+        "skipped": 0,
+        "info": 4
+      },
+      "scored": {
+        "passed": 53,
+        "failed": 8,
+        "warnings": 0,
+        "skipped": 0,
+        "info": 1
+      },
+      "scenarios": [
+        {
+          "scenario": "completion-complete",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "completion-complete",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "dns-rebinding-protection",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "localhost-host-rebinding-rejected",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "localhost-host-valid-accepted",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "elicitation-sep1034-defaults",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "elicitation-sep1034-general",
+              "status": "FAILURE",
+              "errorMessage": "Server did not request elicitation from client"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "elicitation-sep1330-enums",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "elicitation-sep1330-general",
+              "status": "FAILURE",
+              "errorMessage": "Server did not request elicitation from client"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "json-schema-2020-12",
+          "scored": false,
+          "passed": 8,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "json-schema-2020-12-tool-found",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "json-schema-2020-12-$schema",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "json-schema-2020-12-$defs",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "json-schema-2020-12-additionalProperties",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2106-composition-keywords-preserved",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2106-conditional-keywords-preserved",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "sep-2106-anchor-keyword-preserved",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "logging-set-level",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "logging-set-level",
+              "status": "FAILURE",
+              "errorMessage": "Failed: logging/setLevel"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "ping",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "ping",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-get-embedded-resource",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-get-embedded-resource",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-get-simple",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-get-simple",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-get-with-args",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-get-with-args",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-get-with-image",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-get-with-image",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "prompts-list",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "prompts-list",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-list",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-list",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-read-binary",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-read-binary",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-read-text",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-read-text",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-subscribe",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-subscribe",
+              "status": "FAILURE",
+              "errorMessage": "Failed: resources/subscribe"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-templates-read",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-templates-read",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "resources-unsubscribe",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "resources-unsubscribe",
+              "status": "FAILURE",
+              "errorMessage": "Failed: resources/subscribe"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "server-initialize",
+          "scored": true,
+          "passed": 3,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "server-initialize",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "server-session-id-visible-ascii",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "server-session-lifecycle",
+          "scored": false,
+          "passed": 3,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "server-session-initialized-accepted",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "server-session-delete-accepted",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "server-session-terminated-returns-404",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "server-sse-multiple-streams",
+          "scored": true,
+          "passed": 1,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 1,
+          "checks": [
+            {
+              "id": "server-accepts-multiple-post-streams",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "server-sse-streams-functional",
+              "status": "INFO"
+            }
+          ]
+        },
+        {
+          "scenario": "server-sse-polling",
+          "scored": false,
+          "passed": 0,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 3,
+          "checks": [
+            {
+              "id": "outgoing-request",
+              "status": "INFO"
+            },
+            {
+              "id": "incoming-response",
+              "status": "INFO"
+            },
+            {
+              "id": "server-sse-content-type",
+              "status": "INFO"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-audio",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-audio",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-elicitation",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-elicitation",
+              "status": "FAILURE",
+              "errorMessage": "Server did not request elicitation from client"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-embedded-resource",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-embedded-resource",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-error",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-error",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-image",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-image",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-mixed-content",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-mixed-content",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-sampling",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-sampling",
+              "status": "FAILURE",
+              "errorMessage": "Server did not request sampling from client"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-simple-text",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-simple-text",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-with-logging",
+          "scored": true,
+          "passed": 1,
+          "failed": 1,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-with-logging",
+              "status": "FAILURE",
+              "errorMessage": "Failed: MCP error -32601: logging/setLevel"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-call-with-progress",
+          "scored": true,
+          "passed": 2,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-call-with-progress",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        },
+        {
+          "scenario": "tools-list",
+          "scored": true,
+          "passed": 3,
+          "failed": 0,
+          "warnings": 0,
+          "skipped": 0,
+          "info": 0,
+          "checks": [
+            {
+              "id": "tools-list",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "tools-name-format",
+              "status": "SUCCESS"
+            },
+            {
+              "id": "wire-schema-valid",
+              "status": "SUCCESS"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

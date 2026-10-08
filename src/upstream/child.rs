@@ -6,7 +6,13 @@ use rmcp::service::{
     ServiceError,
 };
 use rmcp::ErrorData;
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 
@@ -17,6 +23,7 @@ pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 pub struct UpstreamChild {
     client: RunningService<RoleClient, UpstreamHandler>,
     handler: UpstreamHandler,
+    cancellation_sent: Arc<AtomicBool>,
 }
 
 impl UpstreamChild {
@@ -39,6 +46,7 @@ impl UpstreamChild {
                 "cannot start configured stdio command".into(),
             )
         })?;
+        let cancellation_sent = transport.cancellation_sent.clone();
         let handler = UpstreamHandler::default();
         let client = tokio::time::timeout(
             STARTUP_TIMEOUT,
@@ -61,7 +69,11 @@ impl UpstreamChild {
                 "stdio discovery/initialization failed; run doctor".into(),
             )
         })?;
-        Ok(Self { client, handler })
+        Ok(Self {
+            client,
+            handler,
+            cancellation_sent,
+        })
     }
 
     pub fn peer(&self) -> &rmcp::Peer<RoleClient> {
@@ -113,6 +125,7 @@ impl UpstreamChild {
         let result = tokio::select! {
             biased;
             _ = ct.cancelled() => {
+                self.cancellation_sent.store(true, Ordering::Release);
                 let notification = rmcp::model::CancelledNotificationParam::new(Some(upstream_id), Some("downstream cancelled".into()));
                 let _ = self.client.notify_cancelled(notification).await;
                 return Err(ErrorData::internal_error("request cancelled", None));
@@ -120,6 +133,7 @@ impl UpstreamChild {
             result = handle.await_response() => result,
         };
         if matches!(result, Err(ServiceError::Timeout { .. })) {
+            self.cancellation_sent.store(true, Ordering::Release);
             let _ = self
                 .client
                 .notify_cancelled(rmcp::model::CancelledNotificationParam::new(
