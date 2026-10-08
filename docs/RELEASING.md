@@ -39,6 +39,8 @@ Cloudflared is pinned to 2026.10.0 with per-platform digests from its official G
 
 ## Evidence
 
+Version **0.3.0** passed [Linux/macOS/Windows CI](https://github.com/mcptunnel/mcptunnel/actions/runs/37859545144): 66 tests per platform, fmt, strict Clippy, release builds and shared/multiple-port routing checks, plus all 50 supported conformance scenarios. Its [native candidate run](https://github.com/mcptunnel/mcptunnel/actions/runs/37859545313) passed all five target jobs, including install/reinstall, paths with spaces, corrupt-download rejection and actual official Filesystem MCP via `npx`. Downloaded archive digests were verified locally; [exact checksums and source commit](LOCAL_ROUTING_RESULTS.json) are retained. Default localhost/8000 auto-start and real public Quick HTTPS also passed on Windows. These are candidate artifacts; anonymous publication awaits the owner's repository visibility/download destination decision.
+
 The earlier 0.2.2 [three-platform CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37839162800) passed all Rust and supported conformance jobs.
 
 The 0.2.3 [full CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37847936476) also passed on Linux/macOS/Windows: evidence checks, fmt, strict Clippy, 63 tests per platform and release builds, plus all 50 supported conformance scenarios.

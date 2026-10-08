@@ -184,3 +184,5 @@ Run regression tests and the pinned official fixture using the commands in the [
 | Linux/macOS/Windows platform CI | PASS | [Executed CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37839162800); separate five-target binary installer checks are recorded in release evidence |
 
 Before claiming a real client PASS, record client build, account eligibility, revision, URL transport, auth mode and results for all ten operations. Use dedicated test credentials, retain redacted evidence, and explicitly record unsupported resource/prompt UI behavior. Changing a client's version requires re-verification.
+
+Version 0.3.0 passed [three-platform CI](https://github.com/mcptunnel/mcptunnel/actions/runs/37859545144), including 66 Rust tests per platform, the new port/path/public-isolation routing smoke and 50 supported conformance scenarios. Its five native candidates passed actual `npx` Filesystem MCP checks; default localhost:8000 auto-start and real Cloudflare Quick HTTPS passed on Windows. [Exact results](LOCAL_ROUTING_RESULTS.json) do not imply account-backed AI-client or external browser OAuth E2E.

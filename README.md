@@ -206,7 +206,7 @@ cargo build --example fake_cloudflared
 node scripts/smoke-routing.mjs
 ```
 
-Tests include real HTTP/stdio processes, Windows IPC, process-tree cleanup, and the real 60-second timeout. Historical Linux, macOS and Windows CI and the supported conformance subset passed for 0.2.3. The 0.3.0 routing checks additionally exercise multiple listeners, public ingress isolation, provider reuse/reaping and persistence; see the engineering report for current results. Each tagged release must repeat these checks and pass actual binary-installation and official Filesystem MCP checks on all five release targets before publication. Actual account-backed AI clients remain unverified.
+Tests include real HTTP/stdio processes, Windows IPC, process-tree cleanup, and the real 60-second timeout. Version 0.3.0 passed Linux/macOS/Windows CI: 66 Rust tests per platform, shared/multiple listener and public isolation checks, and 50 supported conformance scenarios. All five native targets passed real installation and Filesystem MCP checks. [Exact verification and candidate checksums](docs/LOCAL_ROUTING_RESULTS.json) are recorded. Each tagged release must repeat these checks and pass actual binary-installation and official Filesystem MCP checks on all five release targets before publication. Actual account-backed AI clients remain unverified.
 
 Maintainers: see [release procedure and installer options](docs/RELEASING.md).
 

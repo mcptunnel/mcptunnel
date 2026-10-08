@@ -1,0 +1,94 @@
+{
+  "kind": "verified-routing-release-candidate",
+  "version": "0.3.0",
+  "date": "2026-10-08",
+  "sourceCommit": "9a1590c9d5c801196c29067987b2d9b644d6ec43",
+  "rustCi": {
+    "status": "PASS",
+    "workflowRun": "https://github.com/mcptunnel/mcptunnel/actions/runs/37859545144",
+    "platforms": [
+      "Linux",
+      "macOS",
+      "Windows"
+    ],
+    "testsPerPlatform": 66,
+    "supportedConformanceScenarios": 50,
+    "routingSmokePerPlatform": "PASS"
+  },
+  "nativeWorkflowRun": "https://github.com/mcptunnel/mcptunnel/actions/runs/37859545313",
+  "serverPackage": "@modelcontextprotocol/server-filesystem@2026.8.31",
+  "archives": [
+    {
+      "name": "mcptunnel-v0.3.0-aarch64-apple-darwin.tar.gz",
+      "sha256": "31face75ead0dda6df47dca39a5acd3ab0b12e9f5611a706bbeea683f0a27536",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "pathsWithSpaces": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    },
+    {
+      "name": "mcptunnel-v0.3.0-aarch64-unknown-linux-gnu.tar.gz",
+      "sha256": "d924aaa82be589a7cb73a3f7dc06abbf242e4b0103287415810264c90d10fde8",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "pathsWithSpaces": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    },
+    {
+      "name": "mcptunnel-v0.3.0-x86_64-apple-darwin.tar.gz",
+      "sha256": "25e27c98012919424446ea194b56bf3dae1343e89c6b1dda0f737f0b4e16b4d3",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "pathsWithSpaces": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    },
+    {
+      "name": "mcptunnel-v0.3.0-x86_64-pc-windows-msvc.zip",
+      "sha256": "5d369b5f19fa11e0533877a02b6d7f0b02a643164dd247205c22f9e9f89d6d12",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "pathsWithSpaces": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    },
+    {
+      "name": "mcptunnel-v0.3.0-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "6c801baaa4a5beacc6a85142f97867fd72c189db5c923bcc47785101eead30d8",
+      "build": "PASS",
+      "installation": "PASS",
+      "reinstallation": "PASS",
+      "pathsWithSpaces": "PASS",
+      "corruptDownloadRejection": "PASS",
+      "officialFilesystemMcp": "PASS"
+    }
+  ],
+  "localWindows": {
+    "defaultPort8000AndImplicitDaemon": "PASS",
+    "optionalFlagsAndExactPaths": "PASS",
+    "sharedAndSeparateListeners": "PASS",
+    "samePathDifferentPorts": "PASS",
+    "inferredAndExplicitCollisions": "PASS",
+    "hostAndOriginBoundary": "PASS",
+    "legacySessionMountIsolationAcrossPorts": "PASS",
+    "portProbeProviderRollback": "PASS",
+    "localPublicMcpAndOAuthMetadataIsolation": "PASS",
+    "providerSharingAndReaping": "PASS",
+    "restartPersistence": "PASS",
+    "officialFilesystemLocalHttp": "PASS",
+    "officialFilesystemPublicQuickHttps": "PASS",
+    "packagedInstaller": "PASS",
+    "processCleanup": "PASS"
+  },
+  "published": false,
+  "publicationBlocker": "Source repository is private; public download destination awaits owner decision",
+  "actualAiClientE2e": "NOT TESTED",
+  "externalOAuthBrowserE2e": "NOT TESTED",
+  "fullProtocolConformance": "NOT RERUN for 0.3.0; prior full requirements fail on documented unsupported features (see CONFORMANCE_RESULTS.json)"
+}
