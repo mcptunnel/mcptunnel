@@ -196,6 +196,9 @@ pub fn project_dirs() -> Option<ProjectDirs> {
 
 /// Config file path: `~/.config/mcptunnel/config.toml`
 pub fn config_path() -> PathBuf {
+    if let Some(path) = std::env::var_os("MCPTUNNEL_CONFIG") {
+        return PathBuf::from(path);
+    }
     project_dirs()
         .map(|d| d.config_dir().join("config.toml"))
         .unwrap_or_else(|| PathBuf::from("config.toml"))
@@ -203,6 +206,9 @@ pub fn config_path() -> PathBuf {
 
 /// State directory: `~/.local/state/mcptunnel/`
 pub fn state_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("MCPTUNNEL_STATE_DIR") {
+        return PathBuf::from(path);
+    }
     project_dirs()
         .map(|d| d.data_local_dir().to_path_buf())
         .unwrap_or_else(|| PathBuf::from(".mcptunnel"))
@@ -219,22 +225,18 @@ pub fn socket_path() -> PathBuf {
 }
 
 /// Load config from file, falling back to defaults.
-pub fn load_config() -> Config {
+pub fn load_config() -> crate::error::Result<Config> {
     let path = config_path();
     if path.exists() {
-        match std::fs::read_to_string(&path) {
-            Ok(contents) => match toml::from_str(&contents) {
-                Ok(config) => return config,
-                Err(e) => {
-                    eprintln!("Warning: failed to parse config at {}: {e}", path.display());
-                }
-            },
-            Err(e) => {
-                eprintln!("Warning: failed to read config at {}: {e}", path.display());
-            }
-        }
+        let contents = std::fs::read_to_string(&path)?;
+        return toml::from_str(&contents).map_err(|_| {
+            crate::error::McpTunnelError::CliUsage(format!(
+                "invalid configuration at {}; correct it before starting the gateway",
+                path.display()
+            ))
+        });
     }
-    Config::default()
+    Ok(Config::default())
 }
 
 #[cfg(test)]

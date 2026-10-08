@@ -37,14 +37,15 @@ impl JwksCache {
     pub fn new() -> Self {
         Self::default()
     }
-    async fn refresh(&self, issuer: &str) -> Result<(), String> {
+    async fn refresh(&self, issuer: &str, force: bool) -> Result<(), String> {
         let _guard = self.refresh.lock().await;
-        if self
-            .issuers
-            .read()
-            .await
-            .get(issuer)
-            .is_some_and(|e| e.fetched.elapsed() < Duration::from_secs(3600))
+        if !force
+            && self
+                .issuers
+                .read()
+                .await
+                .get(issuer)
+                .is_some_and(|e| e.fetched.elapsed() < Duration::from_secs(3600))
         {
             return Ok(());
         }
@@ -154,24 +155,36 @@ pub async fn validate_bearer_token_with_cache(
         ));
     }
     cache
-        .refresh(&config.issuer)
+        .refresh(&config.issuer, false)
         .await
         .map_err(TokenValidationError::InvalidToken)?;
-    let keys = cache.issuers.read().await;
-    let entry = keys
-        .get(&config.issuer)
-        .ok_or_else(|| TokenValidationError::InvalidToken("no issuer keys".into()))?;
-    let key = match jwt_header.kid {
-        Some(kid) => entry.keys.get(&kid),
-        None if entry.keys.len() == 1 => entry.keys.values().next(),
+    let find_key = |entry: &IssuerKeys| match &jwt_header.kid {
+        Some(kid) => entry.keys.get(kid).cloned(),
+        None if entry.keys.len() == 1 => entry.keys.values().next().cloned(),
         _ => None,
+    };
+    let mut key = cache
+        .issuers
+        .read()
+        .await
+        .get(&config.issuer)
+        .and_then(find_key);
+    if key.is_none() {
+        // Rotation can introduce a new kid before the hourly TTL. Refresh at most once/minute.
+        cache
+            .refresh(&config.issuer, true)
+            .await
+            .map_err(TokenValidationError::InvalidToken)?;
+        key = cache
+            .issuers
+            .read()
+            .await
+            .get(&config.issuer)
+            .and_then(find_key);
     }
-    .ok_or_else(|| {
-        TokenValidationError::InvalidToken(
-            "unknown signing key; retry after issuer cache refresh".into(),
-        )
-    })?;
-    validate_bearer_token(header, config, key)
+    let key =
+        key.ok_or_else(|| TokenValidationError::InvalidToken("unknown signing key".into()))?;
+    validate_bearer_token(header, config, &key)
 }
 
 pub fn validate_bearer_token(
@@ -266,6 +279,7 @@ struct Claims {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::future::IntoFuture;
     #[test]
     fn token_and_url_parsing() {
         assert_eq!(extract_bearer_token(Some("BEARER test")).unwrap(), "test");
@@ -331,5 +345,182 @@ mod tests {
         let mut missing = valid.clone();
         missing.as_object_mut().unwrap().remove("exp");
         assert!(validate_bearer_token(Some(&sign(&missing)), &config, &decoding).is_err());
+    }
+
+    #[tokio::test]
+    async fn oauth_http_resource_metadata_scopes_expiry_and_session_subject() {
+        use crate::{
+            config::{AuthModeConfig, Config, TunnelMode},
+            daemon::state::AppState,
+            mount::{db, types::*, MountRegistry},
+            policy::types::PolicyConfig,
+            session::types::SessionConfig,
+        };
+        use rsa::pkcs8::{EncodePrivateKey, EncodePublicKey};
+        use std::sync::{Arc, Mutex as StdMutex};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bind = listener.local_addr().unwrap().to_string();
+        let base = format!("http://{bind}");
+        let resource = format!("{base}/oauth/mcp");
+        let mut config = Config::default();
+        config.daemon.bind = bind;
+        config.tunnel.default_mode = TunnelMode::Local;
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        db::init_db(&conn).unwrap();
+        let registry = MountRegistry::new(Arc::new(StdMutex::new(conn)));
+        registry
+            .create(MountCreateParams {
+                slug: Some("oauth".into()),
+                display_name: None,
+                command: CommandConfig {
+                    program: "node".into(),
+                    args: vec![format!(
+                        "{}/tests/fixtures/legacy.cjs",
+                        env!("CARGO_MANIFEST_DIR")
+                    )],
+                },
+                cwd: None,
+                tunnel_mode: TunnelMode::Local,
+                hostname: None,
+                auth_mode: AuthModeConfig::OAuth,
+                basic_credentials: None,
+                oauth_config: Some(OAuthMountConfig {
+                    issuer: "https://issuer.example".into(),
+                    authorization_servers: vec!["https://issuer.example".into()],
+                    default_scopes: vec!["read".into()],
+                    per_tool_scopes: HashMap::from([("echo".into(), vec!["write".into()])]),
+                    builtin: false,
+                    builtin_user: None,
+                    builtin_password: None,
+                }),
+                policy: PolicyConfig::default(),
+                env_vars: vec![],
+            })
+            .unwrap();
+        let state = Arc::new(AppState::new(config, registry, SessionConfig::default()));
+        let rsa = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 2048).unwrap();
+        let encoding = jsonwebtoken::EncodingKey::from_rsa_pem(
+            rsa.to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap();
+        let decoding = DecodingKey::from_rsa_pem(
+            rsa.to_public_key()
+                .to_public_key_pem(rsa::pkcs8::LineEnding::LF)
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap();
+        state.jwks_cache.issuers.write().await.insert(
+            "https://issuer.example".into(),
+            IssuerKeys {
+                keys: HashMap::from([("key".into(), decoding)]),
+                fetched: Instant::now(),
+            },
+        );
+        let ct = tokio_util::sync::CancellationToken::new();
+        let stop = ct.clone();
+        let task = tokio::spawn(
+            axum::serve(listener, crate::gateway::build_router(state.clone()))
+                .with_graceful_shutdown(stop.cancelled_owned())
+                .into_future(),
+        );
+        let now = chrono::Utc::now().timestamp();
+        let sign = |sub: &str, scope: &str, aud: &str, exp: i64| {
+            let mut header = jsonwebtoken::Header::new(Algorithm::RS256);
+            header.kid = Some("key".into());
+            jsonwebtoken::encode(&header,&serde_json::json!({"iss":"https://issuer.example","sub":sub,"aud":aud,"exp":exp,"scope":scope}),&encoding).unwrap()
+        };
+        let alice = sign("alice", "read", &resource, now + 120);
+        let bob = sign("bob", "read", &resource, now + 120);
+        let client = reqwest::Client::new();
+        let send = |body: serde_json::Value, token: String| {
+            client
+                .post(&resource)
+                .header("accept", "application/json, text/event-stream")
+                .bearer_auth(token)
+                .json(&body)
+        };
+        let init = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"oauth-test","version":"1"}}});
+        let missing = client.post(&resource).json(&init).send().await.unwrap();
+        assert_eq!(missing.status(), 401);
+        assert!(missing.headers()["www-authenticate"]
+            .to_str()
+            .unwrap()
+            .contains("/.well-known/oauth-protected-resource/oauth/mcp"));
+        let metadata: serde_json::Value = client
+            .get(format!(
+                "{base}/.well-known/oauth-protected-resource/oauth/mcp"
+            ))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(metadata["resource"], resource);
+        assert_eq!(
+            metadata["authorization_servers"][0],
+            "https://issuer.example"
+        );
+        for token in [
+            sign("alice", "read", &resource, now - 1),
+            sign("alice", "read", "https://wrong-resource.example", now + 120),
+        ] {
+            assert_eq!(
+                send(init.clone(), token).send().await.unwrap().status(),
+                401
+            );
+        }
+        assert_eq!(
+            send(init.clone(), sign("alice", "other", &resource, now + 120))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            403
+        );
+        let response = send(init, alice.clone()).send().await.unwrap();
+        assert_eq!(response.status(), 200);
+        let sid = response.headers()["mcp-session-id"]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let list = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}});
+        assert_eq!(
+            send(list.clone(), bob)
+                .header("mcp-session-id", &sid)
+                .header("mcp-protocol-version", "2025-11-25")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            404
+        );
+        assert_eq!(
+            send(list, alice.clone())
+                .header("mcp-session-id", &sid)
+                .header("mcp-protocol-version", "2025-11-25")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+        let call = serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo"}});
+        assert_eq!(
+            send(call, alice)
+                .header("mcp-session-id", &sid)
+                .header("mcp-protocol-version", "2025-11-25")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            403
+        );
+        crate::gateway::mcp_handler::close_session(&state, &sid).await;
+        ct.cancel();
+        task.await.unwrap().unwrap();
     }
 }

@@ -42,8 +42,6 @@ pub struct MountCreateRequest {
     pub hostname: Option<String>,
     pub auth_mode: Option<String>,
     pub oidc_issuer: Option<String>,
-    pub oauth_user: Option<String>,
-    pub oauth_password: Option<String>,
     pub scopes: Vec<String>,
     pub allow_tools: Vec<String>,
     pub deny_tools: Vec<String>,
@@ -116,7 +114,7 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
         }
     }
 
-    // Build OAuth config if auth mode is OAuth
+    // External resource-server configuration only.
     let oauth_config = if auth_mode == AuthModeConfig::OAuth {
         if let Some(ref issuer) = req.oidc_issuer {
             // External AS mode
@@ -130,20 +128,7 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
                 builtin_password: None,
             })
         } else {
-            // Built-in AS mode — credentials will be auto-generated in mount registry if needed
-            Some(OAuthMountConfig {
-                issuer: String::new(), // Will be set to tunnel_origin/slug at runtime
-                authorization_servers: vec![],
-                default_scopes: if req.scopes.is_empty() {
-                    vec!["mcp:read".to_string()]
-                } else {
-                    req.scopes.clone()
-                },
-                per_tool_scopes: std::collections::HashMap::new(),
-                builtin: true,
-                builtin_user: req.oauth_user,
-                builtin_password: req.oauth_password,
-            })
+            None
         }
     } else {
         None
@@ -214,22 +199,10 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
     state
         .wait_for_tunnel_ready(std::time::Duration::from_secs(30))
         .await;
-    let public_url = state.public_url(&record.slug).await;
+    let public_url = state.connection_url(&record.slug).await;
 
-    // Build credentials URL if Basic Auth
+    // Reveal Basic credentials only to the authenticated local creation command.
     let basic_credentials = record.basic_credentials.as_ref();
-
-    // Include OAuth credentials if built-in mode
-    let oauth_credentials = record.oauth_config.as_ref().and_then(|c| {
-        if c.builtin {
-            Some(serde_json::json!({
-                "username": c.builtin_user,
-                "password": c.builtin_password,
-            }))
-        } else {
-            None
-        }
-    });
 
     AdminResponse::Ok {
         data: serde_json::json!({
@@ -241,7 +214,6 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
                 "tunnel_mode": tunnel_mode.to_string(),
                 "public_url": public_url,
                 "basic_credentials": basic_credentials,
-                "oauth_credentials": oauth_credentials,
             }
         }),
     }
@@ -289,8 +261,6 @@ async fn handle_mount_delete(state: &Arc<AppState>, slug: &str) -> AdminResponse
 
 async fn handle_mount_list(state: &Arc<AppState>) -> AdminResponse {
     let mounts = state.mount_registry.list().unwrap_or_default();
-    let tunnel_origin = state.tunnel_origin.read().await.clone();
-
     let summaries: Vec<serde_json::Value> =
         futures::future::join_all(mounts.iter().map(|m| async {
             let sessions = state.session_manager.active_count(&m.slug).await;
@@ -299,10 +269,7 @@ async fn handle_mount_list(state: &Arc<AppState>) -> AdminResponse {
                 .as_ref()
                 .map(|p| p.tools.len())
                 .unwrap_or(0);
-            let url = tunnel_origin
-                .as_ref()
-                .map(|o| format!("{}/{}/mcp", o, m.slug))
-                .unwrap_or_else(|| format!("pending:/{}/mcp", m.slug));
+            let url = state.connection_url(&m.slug).await;
 
             serde_json::json!({
                 "slug": m.slug,
@@ -342,7 +309,7 @@ async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminRespons
     state
         .wait_for_tunnel_ready(std::time::Duration::from_secs(30))
         .await;
-    let public_url = state.public_url(slug).await;
+    let public_url = state.connection_url(slug).await;
 
     AdminResponse::Ok {
         data: serde_json::json!({
@@ -426,42 +393,53 @@ async fn handle_tunnel_status(state: &Arc<AppState>) -> AdminResponse {
 }
 
 async fn handle_doctor_run(state: &Arc<AppState>, slug: Option<&str>) -> AdminResponse {
-    let mut checks = Vec::new();
-
-    // Check cloudflared
-    let cf_check = tokio::process::Command::new(&state.config.tunnel.cloudflared_path)
-        .arg("--version")
-        .output()
-        .await;
-    match cf_check {
-        Ok(output) if output.status.success() => {
-            let version = String::from_utf8_lossy(&output.stdout);
-            checks.push(serde_json::json!({
-                "check": "cloudflared",
-                "status": "PASS",
-                "detail": version.trim(),
-            }));
-        }
-        _ => {
-            checks.push(serde_json::json!({
-                "check": "cloudflared",
-                "status": "FAIL",
-                "detail": format!("cloudflared not found at '{}'", state.config.tunnel.cloudflared_path),
-            }));
-        }
-    }
+    let mut checks =
+        crate::doctor::format_checks_json(&crate::doctor::run_local_doctor(&state.config).await)
+            ["checks"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
 
     // Check tunnel
     let tunnel_origin = state.tunnel_origin.read().await.clone();
     checks.push(serde_json::json!({
         "check": "tunnel",
-        "status": if tunnel_origin.is_some() { "PASS" } else { "WARN" },
-        "detail": tunnel_origin.as_deref().unwrap_or("no tunnel active"),
+        "status": "WARN",
+        "detail": if tunnel_origin.is_some() { "Provider announced an origin; public/client connectivity still requires a real connection test" } else { "No public tunnel origin; check cloudflared installation/network or configure independent local hosting" },
     }));
 
     // Mount-specific checks
     if let Some(slug) = slug {
         if let Ok(Some(mount)) = state.mount_registry.get(slug) {
+            checks.extend(
+                crate::doctor::format_checks_json(&crate::doctor::mount_checks(&mount))["checks"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+            let live = tokio::time::timeout(
+                std::time::Duration::from_secs(45),
+                crate::upstream::probe::probe_upstream(
+                    &mount.command,
+                    mount.cwd.as_deref(),
+                    &mount.env_vars,
+                ),
+            )
+            .await;
+            match live {
+                Ok(probe) => {
+                    checks.push(serde_json::json!({"check":"upstream_live","status":if probe.ok {"PASS"} else {"FAIL"},"detail":if probe.ok {"fresh stdio lifecycle/list probe succeeded"} else {probe.error.as_deref().unwrap_or("stdio probe failed; check executable path, cwd/env and clean JSON stdout")} }));
+                    let _ = state.mount_registry.set_probe_result(slug,&probe);
+                }
+                Err(_) => checks.push(serde_json::json!({"check":"upstream_live","status":"FAIL","detail":"stdio probe exceeded 45s; check startup, stdout protocol and advertised list methods"})),
+            }
+            let logs = state.get_logs(slug, 8).await;
+            if logs
+                .iter()
+                .any(|line| line.contains("status=4") || line.contains("status=5"))
+            {
+                checks.push(serde_json::json!({"check":"recent_http_errors","status":"WARN","detail":"Recent HTTP errors: 400=metadata/header/body mismatch; 401=missing/invalid credential or exact OAuth audience; 403=Origin/scopes/policy; 404=mount/session or unsupported method; 405=unsupported GET/DELETE; 406=Accept; 415=Content-Type; 429=concurrency; 503=disabled auth/managed backend. See docs/CLIENT_COMPATIBILITY.md."}));
+            }
             // Check upstream probe
             match &mount.last_probe_result {
                 Some(probe) if probe.ok => {

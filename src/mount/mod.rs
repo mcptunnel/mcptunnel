@@ -60,29 +60,15 @@ impl MountRegistry {
             params.basic_credentials
         };
 
-        // Auto-generate OAuth credentials for built-in AS mode
-        let oauth_config = if params.auth_mode == AuthModeConfig::OAuth {
-            params.oauth_config.map(|mut c| {
-                if c.builtin {
-                    if c.builtin_user.is_none() {
-                        c.builtin_user =
-                            Some(format!("mct-{}", &uuid::Uuid::new_v4().to_string()[..8]));
-                    }
-                    if c.builtin_password.is_none() {
-                        use rand::Rng;
-                        let password: String = rand::thread_rng()
-                            .sample_iter(&rand::distributions::Alphanumeric)
-                            .take(24)
-                            .map(char::from)
-                            .collect();
-                        c.builtin_password = Some(password);
-                    }
-                }
-                c
-            })
-        } else {
-            params.oauth_config
-        };
+        if params.auth_mode == AuthModeConfig::Inherit
+            || (params.auth_mode == AuthModeConfig::OAuth
+                && params.oauth_config.as_ref().is_none_or(|c| {
+                    c.builtin || crate::auth::oauth::validate_https_url(&c.issuer).is_err()
+                }))
+        {
+            return Err(McpTunnelError::CliUsage("choose basic, public or OAuth with an external HTTPS issuer; builtin and inherit authentication are disabled".into()));
+        }
+        let oauth_config = params.oauth_config;
 
         let now = chrono::Utc::now();
         let record = MountRecord {

@@ -9,9 +9,6 @@ use crate::session::types::SessionConfig;
 use crate::session::SessionManager;
 use crate::upstream::child::UpstreamChild;
 
-/// SSE sender for forwarding notifications to connected clients.
-pub type SseSender = tokio::sync::mpsc::Sender<Result<String, std::convert::Infallible>>;
-
 /// Shared application state for the daemon.
 pub struct AppState {
     pub config: Config,
@@ -27,8 +24,6 @@ pub struct AppState {
     pub jwks_cache: Arc<JwksCache>,
     /// Per-mount log ring buffers: mount_slug -> Vec<log_line>.
     pub mount_logs: RwLock<HashMap<String, Vec<String>>>,
-    /// SSE senders per session ID — for forwarding server notifications to SSE clients.
-    pub sse_senders: RwLock<HashMap<String, SseSender>>,
     /// Shutdown signal.
     pub shutdown: Notify,
 }
@@ -52,7 +47,6 @@ impl AppState {
             cancellation: tokio_util::sync::CancellationToken::new(),
             jwks_cache: Arc::new(JwksCache::new()),
             mount_logs: RwLock::new(HashMap::new()),
-            sse_senders: RwLock::new(HashMap::new()),
             shutdown: Notify::new(),
         }
     }
@@ -82,6 +76,16 @@ impl AppState {
     pub async fn public_url(&self, slug: &str) -> String {
         let origin = self.public_origin().await;
         format!("{origin}/{slug}/mcp")
+    }
+
+    /// No public connection URL is claimed while an ephemeral provider is unavailable.
+    pub async fn connection_url(&self, slug: &str) -> Option<String> {
+        if self.config.tunnel.default_mode == crate::config::TunnelMode::Quick
+            && self.tunnel_origin.read().await.is_none()
+        {
+            return None;
+        }
+        Some(self.public_url(slug).await)
     }
 
     pub async fn public_origin(&self) -> String {
@@ -114,31 +118,6 @@ impl AppState {
                 entries[start..].to_vec()
             }
             None => vec![],
-        }
-    }
-
-    /// Register an SSE sender for a session.
-    pub async fn register_sse_sender(&self, session_id: &str, sender: SseSender) {
-        self.sse_senders
-            .write()
-            .await
-            .insert(session_id.to_string(), sender);
-    }
-
-    /// Remove an SSE sender for a session.
-    pub async fn remove_sse_sender(&self, session_id: &str) {
-        self.sse_senders.write().await.remove(session_id);
-    }
-
-    /// Send an SSE event to a session's connected client.
-    #[allow(dead_code)]
-    pub async fn send_sse_event(&self, session_id: &str, event: &str, data: &str) -> bool {
-        let senders = self.sse_senders.read().await;
-        if let Some(sender) = senders.get(session_id) {
-            let msg = format!("event: {event}\ndata: {data}\n\n");
-            sender.send(Ok(msg)).await.is_ok()
-        } else {
-            false
         }
     }
 }

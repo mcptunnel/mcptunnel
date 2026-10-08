@@ -10,7 +10,13 @@ use crate::error::exit_codes;
 
 /// Execute the CLI command.
 pub async fn execute(cli: Cli) -> i32 {
-    let config = load_config();
+    let config = match load_config() {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("Error: {error}");
+            return exit_codes::CLI_USAGE;
+        }
+    };
 
     // Handle bare command (no subcommand) — treat trailing args as `run -- <command>`
     if cli.command.is_none() {
@@ -48,8 +54,6 @@ async fn handle_run_bare(config: &Config, program: &str, args: &[String]) -> i32
         auth: None,
         scope: vec![],
         oidc_issuer: None,
-        oauth_user: None,
-        oauth_password: None,
         allow_tool: vec![],
         deny_tool: vec![],
         hide_resources: false,
@@ -72,8 +76,6 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
 
     let (program, cmd_args) = args.command.split_first().unwrap();
     let is_json = args.json;
-    let is_managed = args.tunnel.as_deref() == Some("managed");
-    let is_public = args.auth.as_deref() == Some("public");
 
     // Parse env vars
     let env_vars: Vec<(String, String)> = args
@@ -95,8 +97,6 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
         hostname: args.hostname,
         auth_mode: args.auth,
         oidc_issuer: args.oidc_issuer,
-        oauth_user: args.oauth_user,
-        oauth_password: args.oauth_password,
         scopes: args.scope,
         allow_tools: args.allow_tool,
         deny_tools: args.deny_tool,
@@ -115,12 +115,12 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
                 );
             } else {
                 let mut warnings = Vec::new();
-                if is_public {
+                if data["mount"]["auth_mode"] == "public" {
                     warnings.push(
                         "No authentication. This endpoint is publicly reachable.".to_string(),
                     );
                 }
-                if !is_managed {
+                if data["mount"]["tunnel_mode"] == "quick" {
                     warnings.push("Quick Tunnel is for testing/development only.".to_string());
                     warnings.push("Quick Tunnel URLs are temporary and SSE is unavailable. Managed provisioning is not implemented.".to_string());
                 }
@@ -343,7 +343,9 @@ async fn handle_doctor(config: &Config, slug: Option<&str>, json: bool) -> i32 {
             let request = AdminRequest::DoctorRun {
                 slug: Some(slug.to_string()),
             };
-            if let Ok(AdminResponse::Ok { data }) = send_admin_request(config, &request) {
+            if let Ok(AdminResponse::Ok { data }) =
+                send_admin_request_no_autostart(config, &request)
+            {
                 if let Some(checks) = data.get("checks") {
                     all_checks["daemon_checks"] = checks.clone();
                 }
@@ -363,7 +365,9 @@ async fn handle_doctor(config: &Config, slug: Option<&str>, json: bool) -> i32 {
             let request = AdminRequest::DoctorRun {
                 slug: Some(slug.to_string()),
             };
-            if let Ok(AdminResponse::Ok { data }) = send_admin_request(config, &request) {
+            if let Ok(AdminResponse::Ok { data }) =
+                send_admin_request_no_autostart(config, &request)
+            {
                 if let Some(checks) = data["checks"].as_array() {
                     crate::cli::output::print_doctor_checks(checks);
                 }

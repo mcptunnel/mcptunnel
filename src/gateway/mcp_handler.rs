@@ -6,6 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use futures::StreamExt;
 use rmcp::transport::streamable_http_server::{
     session::never::NeverSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
@@ -47,6 +48,9 @@ pub async fn handle_mcp(
     {
         return response;
     }
+    let Ok(_global_permit) = state.request_permits.clone().try_acquire_owned() else {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    };
     let principal =
         match crate::gateway::security::authorize(&state, &mount, request.headers()).await {
             Ok(p) => p,
@@ -86,9 +90,6 @@ pub async fn handle_mcp(
     if request.method() != Method::POST {
         return StatusCode::METHOD_NOT_ALLOWED.into_response();
     }
-    let Ok(_global_permit) = state.request_permits.clone().try_acquire_owned() else {
-        return StatusCode::TOO_MANY_REQUESTS.into_response();
-    };
     let gate = state
         .mount_permits
         .write()
@@ -178,10 +179,14 @@ pub async fn handle_mcp(
                 "legacy request requires initialization and Mcp-Session-Id",
             );
         };
-        if !owns_session(&state, sid, &slug, &principal).await {
+        let Some(session) = state
+            .session_manager
+            .get_session(sid)
+            .await
+            .filter(|s| s.mount_slug == slug && s.principal == principal)
+        else {
             return StatusCode::NOT_FOUND.into_response();
-        }
-        let session = state.session_manager.get_session(sid).await.unwrap();
+        };
         if header_version
             .as_deref()
             .is_some_and(|v| v != session.protocol_version)
@@ -253,6 +258,10 @@ pub async fn handle_mcp(
             Ok(s) => s,
             Err(_) => return StatusCode::TOO_MANY_REQUESTS.into_response(),
         };
+        let mut reservation = SessionReservation {
+            state: state.clone(),
+            id: Some(session.session_id.clone()),
+        };
         let version = reply["result"]["protocolVersion"]
             .as_str()
             .unwrap_or("2025-03-26")
@@ -280,6 +289,7 @@ pub async fn handle_mcp(
             .write()
             .await
             .insert(session.session_id.clone(), Arc::new(child));
+        reservation.id = None;
         response = Json(reply).into_response();
         response
             .headers_mut()
@@ -294,7 +304,31 @@ pub async fn handle_mcp(
             format!("method={method} status={}", response.status().as_u16()),
         )
         .await;
-    response
+    // Hold admission permits until the body ends or the client disconnects, including SSE.
+    let (response_parts, body) = response.into_parts();
+    let stream = futures::stream::unfold(
+        (
+            body.into_data_stream(),
+            (_global_permit, _mount_permit, _session_permit),
+        ),
+        |(mut stream, guards)| async move { stream.next().await.map(|chunk| (chunk, (stream, guards))) },
+    );
+    Response::from_parts(response_parts, Body::from_stream(stream))
+}
+
+struct SessionReservation {
+    state: Arc<AppState>,
+    id: Option<String>,
+}
+impl Drop for SessionReservation {
+    fn drop(&mut self) {
+        if let Some(id) = self.id.take() {
+            let state = self.state.clone();
+            tokio::spawn(async move {
+                close_session(&state, &id).await;
+            });
+        }
+    }
 }
 
 async fn owns_session(state: &AppState, sid: &str, slug: &str, principal: &str) -> bool {

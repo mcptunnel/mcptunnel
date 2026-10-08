@@ -120,7 +120,6 @@ impl Drop for CloudflaredSupervisor {
 /// Parse a tunnel URL from cloudflared output.
 fn parse_tunnel_url(line: &str) -> Option<String> {
     // Look for trycloudflare.com URLs specifically — these are quick tunnel URLs.
-    // Also accept non-cloudflare custom domain URLs for managed tunnels.
     for word in line.split_whitespace() {
         if !word.starts_with("https://") {
             continue;
@@ -183,5 +182,36 @@ mod tests {
             parse_tunnel_url("Terms of Use (https://www.cloudflare.com/website-terms/)"),
             None
         );
+        for url in [
+            "https://paid.example.com",
+            "https://x.trycloudflare.com.evil.example",
+            "https://user:secret@x.trycloudflare.com",
+            "https://x.trycloudflare.com/path",
+            "https://x.y.trycloudflare.com",
+            "https://x.trycloudflare.com?q=1",
+        ] {
+            assert_eq!(parse_tunnel_url(url), None);
+        }
+    }
+
+    #[tokio::test]
+    async fn temporary_origins_change_and_clear_after_stop() {
+        for origin in ["first-random", "second-random"] {
+            let script = format!(
+                "console.error('https://{origin}.trycloudflare.com'); setInterval(()=>{{}},1000)"
+            );
+            let mut process = CloudflaredSupervisor::start("node", vec!["-e".into(), script])
+                .await
+                .unwrap();
+            assert_eq!(
+                process
+                    .wait_for_url(std::time::Duration::from_secs(5))
+                    .await,
+                Some(format!("https://{origin}.trycloudflare.com"))
+            );
+            process.stop().await;
+            assert_eq!(process.public_origin(), None);
+            assert!(!process.is_running());
+        }
     }
 }

@@ -39,12 +39,31 @@ async fn main() -> anyhow::Result<()> {
     anyhow::ensure!(probe.ok, "fixture initialization failed: {:?}", probe.error);
     registry.set_probe_result("test", &probe)?;
     let state = Arc::new(AppState::new(config, registry, SessionConfig::default()));
+    let shutdown_state = state.clone();
+    let router = mcptunnel::gateway::build_router(state.clone()).route(
+        "/__test/shutdown",
+        axum::routing::post(move || {
+            let state = shutdown_state.clone();
+            async move {
+                state.shutdown.notify_one();
+                axum::http::StatusCode::NO_CONTENT
+            }
+        }),
+    );
     println!("READY http://127.0.0.1:43123/test/mcp");
-    axum::serve(listener, mcptunnel::gateway::build_router(state.clone()))
+    let stop = state.clone();
+    axum::serve(listener, router)
         .with_graceful_shutdown(async move {
-            let _ = tokio::signal::ctrl_c().await;
-            state.cancellation.cancel();
+            tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = stop.shutdown.notified() => {} }
+            stop.cancellation.cancel();
         })
         .await?;
+    let children = std::mem::take(&mut *state.upstream_children.write().await);
+    for (_, child) in children {
+        child.cancel();
+        if let Ok(child) = Arc::try_unwrap(child) {
+            child.shutdown().await;
+        }
+    }
     Ok(())
 }

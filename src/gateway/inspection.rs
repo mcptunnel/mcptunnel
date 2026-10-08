@@ -26,13 +26,12 @@ pub async fn inspection_page(
         return response;
     }
 
-    let tunnel_origin = state
-        .tunnel_origin
-        .read()
-        .await
-        .clone()
-        .unwrap_or_else(|| "unavailable".to_string());
-    let public_url = format!("{tunnel_origin}/{slug}/mcp");
+    let public_url = escape(
+        &state
+            .connection_url(&slug)
+            .await
+            .unwrap_or_else(|| "unavailable; check tunnel status".into()),
+    );
     let active_sessions = state.session_manager.active_count(&slug).await;
 
     let probe_info = mount.last_probe_result.as_ref().map(|p| {

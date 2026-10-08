@@ -31,7 +31,7 @@ impl SessionManager {
             .filter(|s| s.mount_slug == mount_slug && s.status == SessionStatus::Active)
             .count();
 
-        if mount_count >= self.config.max_sessions_per_mount {
+        if mount_count >= self.config.max_sessions_per_mount || sessions.len() >= 256 {
             return Err(format!(
                 "max sessions ({}) reached for mount '{mount_slug}'",
                 self.config.max_sessions_per_mount
@@ -71,7 +71,19 @@ impl SessionManager {
     /// Look up a session by its session ID.
     pub async fn get_session(&self, session_id: &str) -> Option<Session> {
         let sessions = self.sessions.read().await;
-        sessions.get(session_id).cloned()
+        sessions
+            .get(session_id)
+            .filter(|s| {
+                let now = Utc::now();
+                s.status == SessionStatus::Active
+                    && (now - s.last_activity_at)
+                        .to_std()
+                        .is_ok_and(|d| d <= self.config.idle_ttl)
+                    && (now - s.created_at)
+                        .to_std()
+                        .is_ok_and(|d| d <= self.config.hard_ttl)
+            })
+            .cloned()
     }
 
     /// Update last activity time for a session.

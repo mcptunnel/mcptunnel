@@ -48,34 +48,57 @@ pub async fn probe_upstream(
         {
             continue;
         }
-        match child
-            .request(method, json!({}), RequestMetaObject::default(), &ct)
-            .await
-        {
-            Ok(value) => {
-                let entries = value[key].as_array().cloned().unwrap_or_default();
-                let names = entries
-                    .iter()
-                    .filter_map(|v| {
-                        v[if key == "resources" { "uri" } else { "name" }]
-                            .as_str()
-                            .map(str::to_owned)
-                    })
-                    .collect();
-                match key {
-                    "tools" => {
-                        result.tools = names;
-                        result.tool_definitions = entries;
-                    }
-                    "resources" => result.resources = names,
-                    _ => result.prompts = names,
+        let mut cursor = None;
+        let mut seen = std::collections::HashSet::new();
+        let mut entries = Vec::new();
+        let mut catalog_bytes = 0usize;
+        loop {
+            let params = cursor
+                .as_ref()
+                .map_or(json!({}), |cursor: &String| json!({"cursor":cursor}));
+            let value = match child
+                .request(method, params, RequestMetaObject::default(), &ct)
+                .await
+            {
+                Ok(value) => value,
+                Err(_) => {
+                    result.error = Some(format!("upstream advertised {cap} but {method} failed"));
+                    child.shutdown().await;
+                    return result;
                 }
-            }
-            Err(_) => {
-                result.error = Some(format!("upstream advertised {cap} but {method} failed"));
+            };
+            catalog_bytes += value.to_string().len();
+            entries.extend(value[key].as_array().cloned().unwrap_or_default());
+            cursor = value["nextCursor"].as_str().map(str::to_owned);
+            if entries.len() > 4096
+                || catalog_bytes > 16 * 1024 * 1024
+                || cursor
+                    .as_ref()
+                    .is_some_and(|c| !seen.insert(c.clone()) || seen.len() >= 64)
+            {
+                result.error = Some("upstream discovery exceeds bounded catalog/pagination limits or repeats a cursor".into());
                 child.shutdown().await;
                 return result;
             }
+            if cursor.is_none() {
+                break;
+            }
+        }
+        let names = entries
+            .iter()
+            .filter_map(|v| {
+                v[if key == "resources" { "uri" } else { "name" }]
+                    .as_str()
+                    .map(str::to_owned)
+            })
+            .collect();
+        match key {
+            "tools" => {
+                result.tools = names;
+                result.tool_definitions = entries;
+            }
+            "resources" => result.resources = names,
+            _ => result.prompts = names,
         }
     }
     result.ok = true;

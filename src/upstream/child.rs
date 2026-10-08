@@ -1,3 +1,4 @@
+use super::progress::{ProgressSink, UpstreamHandler};
 use crate::mount::types::CommandConfig;
 use rmcp::model::{ClientRequest, ProtocolVersion, RequestMetaObject};
 use rmcp::service::{
@@ -14,7 +15,8 @@ pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// SDK-owned stdio lifecycle; Auto probes discovery, then initializes legacy peers.
 pub struct UpstreamChild {
-    client: RunningService<RoleClient, ()>,
+    client: RunningService<RoleClient, UpstreamHandler>,
+    handler: UpstreamHandler,
 }
 
 impl UpstreamChild {
@@ -32,17 +34,15 @@ impl UpstreamChild {
         }
         cmd.envs(env_vars.iter().cloned());
         // Upstream stderr may contain secrets; do not inherit it into daemon logs.
-        let (transport, _) = rmcp::transport::TokioChildProcess::builder(cmd)
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|_| {
-                crate::error::McpTunnelError::UpstreamSpawnFailed(
-                    "cannot start configured stdio command".into(),
-                )
-            })?;
+        let transport = super::transport::spawn(cmd).map_err(|_| {
+            crate::error::McpTunnelError::UpstreamSpawnFailed(
+                "cannot start configured stdio command".into(),
+            )
+        })?;
+        let handler = UpstreamHandler::default();
         let client = tokio::time::timeout(
             STARTUP_TIMEOUT,
-            ().serve_with_lifecycle(
+            handler.clone().serve_with_lifecycle(
                 transport,
                 ClientLifecycleMode::Auto {
                     preferred_versions: vec![ProtocolVersion::V_2026_07_28],
@@ -61,7 +61,7 @@ impl UpstreamChild {
                 "stdio discovery/initialization failed; run doctor".into(),
             )
         })?;
-        Ok(Self { client })
+        Ok(Self { client, handler })
     }
 
     pub fn peer(&self) -> &rmcp::Peer<RoleClient> {
@@ -72,9 +72,21 @@ impl UpstreamChild {
     pub async fn request(
         &self,
         method: &str,
+        params: serde_json::Value,
+        meta: RequestMetaObject,
+        ct: &CancellationToken,
+    ) -> Result<serde_json::Value, ErrorData> {
+        self.request_with_progress(method, params, meta, ct, None)
+            .await
+    }
+
+    pub async fn request_with_progress(
+        &self,
+        method: &str,
         mut params: serde_json::Value,
         mut meta: RequestMetaObject,
         ct: &CancellationToken,
+        sink: Option<ProgressSink>,
     ) -> Result<serde_json::Value, ErrorData> {
         if let Some(obj) = params.as_object_mut() {
             obj.remove("_meta");
@@ -86,6 +98,7 @@ impl UpstreamChild {
         let request: ClientRequest =
             serde_json::from_value(serde_json::json!({"method": method, "params": params}))
                 .map_err(|_| ErrorData::invalid_params("invalid MCP parameters", None))?;
+        let gate = self.handler.registration.lock().await;
         let handle = self
             .client
             .send_cancellable_request(
@@ -94,6 +107,8 @@ impl UpstreamChild {
             )
             .await
             .map_err(map_error)?;
+        let _route = self.handler.register(handle.progress_token.clone(), sink);
+        drop(gate);
         let upstream_id = handle.id.clone();
         let result = tokio::select! {
             biased;
@@ -102,8 +117,18 @@ impl UpstreamChild {
                 let _ = self.client.notify_cancelled(notification).await;
                 return Err(ErrorData::internal_error("request cancelled", None));
             }
-            result = handle.await_response() => result.map_err(map_error)?,
+            result = handle.await_response() => result,
         };
+        if matches!(result, Err(ServiceError::Timeout { .. })) {
+            let _ = self
+                .client
+                .notify_cancelled(rmcp::model::CancelledNotificationParam::new(
+                    Some(upstream_id),
+                    Some("request timeout".into()),
+                ))
+                .await;
+        }
+        let result = result.map_err(map_error)?;
         serde_json::to_value(result)
             .map_err(|_| ErrorData::internal_error("invalid upstream result", None))
     }

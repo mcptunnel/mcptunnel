@@ -27,16 +27,17 @@ impl std::fmt::Display for DoctorStatus {
 
 /// Run local environment doctor checks (no daemon required).
 pub async fn run_local_doctor(config: &Config) -> Vec<DoctorCheck> {
-    let mut checks = Vec::new();
+    let mut checks = configuration_checks(config);
 
     // Check cloudflared
-    let cf_result = tokio::process::Command::new(&config.tunnel.cloudflared_path)
-        .arg("--version")
-        .output()
-        .await;
+    let mut command = tokio::process::Command::new(&config.tunnel.cloudflared_path);
+    command.arg("--version").kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    let cf_result = tokio::time::timeout(std::time::Duration::from_secs(5), command.output()).await;
 
     match cf_result {
-        Ok(output) if output.status.success() => {
+        Ok(Ok(output)) if output.status.success() => {
             let version = String::from_utf8_lossy(&output.stdout);
             checks.push(DoctorCheck {
                 name: "cloudflared".to_string(),
@@ -47,7 +48,11 @@ pub async fn run_local_doctor(config: &Config) -> Vec<DoctorCheck> {
         Ok(_) => {
             checks.push(DoctorCheck {
                 name: "cloudflared".to_string(),
-                status: DoctorStatus::Fail,
+                status: if config.tunnel.default_mode == crate::config::TunnelMode::Quick {
+                    DoctorStatus::Fail
+                } else {
+                    DoctorStatus::Warn
+                },
                 detail: format!(
                     "cloudflared returned error at '{}'",
                     config.tunnel.cloudflared_path
@@ -57,7 +62,11 @@ pub async fn run_local_doctor(config: &Config) -> Vec<DoctorCheck> {
         Err(_) => {
             checks.push(DoctorCheck {
                 name: "cloudflared".to_string(),
-                status: DoctorStatus::Fail,
+                status: if config.tunnel.default_mode == crate::config::TunnelMode::Quick {
+                    DoctorStatus::Fail
+                } else {
+                    DoctorStatus::Warn
+                },
                 detail: format!(
                     "cloudflared not found at '{}'",
                     config.tunnel.cloudflared_path
@@ -131,6 +140,50 @@ pub async fn run_local_doctor(config: &Config) -> Vec<DoctorCheck> {
         }
     }
 
+    checks
+}
+
+pub fn configuration_checks(config: &Config) -> Vec<DoctorCheck> {
+    let loopback = config
+        .daemon
+        .bind
+        .parse::<std::net::SocketAddr>()
+        .is_ok_and(|addr| addr.ip().is_loopback());
+    let mut checks = vec![DoctorCheck { name:"bind".into(),status:if loopback {DoctorStatus::Pass} else {DoctorStatus::Fail},detail:"daemon.bind must use a loopback IP:port; route an external proxy to this address".into() },
+        DoctorCheck {name:"protocol_headers".into(),status:DoctorStatus::Warn,detail:"Current MCP: set Content-Type: application/json, Accept: application/json, text/event-stream, MCP-Protocol-Version: 2026-07-28, Mcp-Method and (for named operations) Mcp-Name. Match these to params/_meta and the body; supply required Mcp-Param-* schema headers. Legacy: initialize and use returned session ID/version. See docs/CLIENT_COMPATIBILITY.md.".into()}];
+    match config.tunnel.default_mode {
+        crate::config::TunnelMode::Quick => checks.push(DoctorCheck {name:"quick_sse".into(),status:DoctorStatus::Warn,detail:"Quick URLs change on restart; synchronous JSON only. Streaming/progress requires independently hosted SSE-capable transport. Update client URL and OAuth resource audience after reconnect.".into()}),
+        crate::config::TunnelMode::Managed => checks.push(DoctorCheck {name:"managed_entitlement".into(),status:DoctorStatus::Fail,detail:"Managed hosting is unavailable: a trusted paid entitlement/provisioning backend is required. Choose quick or independently hosted local mode.".into()}),
+        crate::config::TunnelMode::Local => checks.push(DoctorCheck {name:"local_hosting".into(),status:DoctorStatus::Warn,detail:"No managed tunnel is provisioned. Independently configure HTTPS, preserve Host/auth/MCP headers, and disable proxy buffering for request SSE.".into()}),
+    }
+    checks
+}
+
+pub fn mount_checks(mount: &crate::mount::types::MountRecord) -> Vec<DoctorCheck> {
+    use crate::config::AuthModeConfig;
+    let mut checks = Vec::new();
+    let (status, detail) = match mount.auth_mode {
+        AuthModeConfig::Public => (DoctorStatus::Warn,"Public endpoint: restrict tool policy before sharing. Anyone with the URL can invoke allowed operations."),
+        AuthModeConfig::Basic if mount.basic_credentials.is_some() => (DoctorStatus::Pass,"Basic requires the Authorization header printed at creation; URL userinfo is unsupported. Hosted ChatGPT/Claude connector Basic support is not verified; use external OAuth or explicit public mode."),
+        AuthModeConfig::Basic => (DoctorStatus::Fail,"Basic credentials missing; recreate the mount."),
+        AuthModeConfig::Inherit => (DoctorStatus::Fail,"stdio authentication cannot protect HTTP; recreate using Basic, external OAuth or explicit public mode."),
+        AuthModeConfig::OAuth if mount.oauth_config.as_ref().is_some_and(|c| !c.builtin && crate::auth::oauth::validate_https_url(&c.issuer).is_ok()) => (DoctorStatus::Warn,"External OAuth: AS must support resource indicators, PKCE and CIMD or safe registration. RS256 JWT needs iss/sub/aud/exp and required scopes; aud is the exact current /slug/mcp URL. Browser authorization E2E is not established by configuration."),
+        AuthModeConfig::OAuth => (DoctorStatus::Fail,"Built-in/missing/invalid OAuth configuration; recreate with --oidc-issuer https://issuer and required --scope values."),
+    };
+    checks.push(DoctorCheck {
+        name: "authentication".into(),
+        status,
+        detail: detail.into(),
+    });
+    if let Some(probe) = &mount.last_probe_result {
+        let compatible = probe
+            .protocol_version
+            .as_deref()
+            .is_some_and(|v| crate::gateway::mcp_handler::SUPPORTED.contains(&v));
+        checks.push(DoctorCheck {name:"upstream_protocol".into(),status:if probe.ok && compatible {DoctorStatus::Pass} else {DoctorStatus::Fail},detail:format!("Cached probe revision: {}. Modern discovery or legacy initialize must return a supported version and valid advertised lists; stdout must contain only newline-delimited JSON-RPC. Use an absolute executable path on Windows and verify cwd/env.",probe.protocol_version.as_deref().unwrap_or("unknown"))});
+    } else {
+        checks.push(DoctorCheck {name:"upstream_protocol".into(),status:DoctorStatus::Warn,detail:"No probe: use eager probing to establish capabilities and x-mcp-header schemas before connecting.".into()});
+    }
     checks
 }
 

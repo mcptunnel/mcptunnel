@@ -1,0 +1,62 @@
+name: Rust and MCP verification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.88.0'
+          components: rustfmt, clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: cargo test --locked --all-targets
+      - run: cargo build --locked --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcptunnel-${{ matrix.os }}
+          path: |
+            target/release/mcptunnel
+            target/release/mcptunnel.exe
+          if-no-files-found: error
+  applicable-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.88.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned official conformance source
+        run: |
+          git clone https://github.com/modelcontextprotocol/conformance.git target/conformance-source
+          git -C target/conformance-source checkout c37eec888e1c6ff140af79987a40008548b7cc5f
+          cd target/conformance-source
+          npm ci
+          npm run build
+      - run: node scripts/prepare-conformance.mjs
+      - run: cargo build --locked --example conformance_gateway
+      - run: node scripts/run-conformance.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: applicable-conformance-reports
+          path: target/conformance-results

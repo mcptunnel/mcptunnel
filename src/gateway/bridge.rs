@@ -25,6 +25,17 @@ impl Bridge {
         let modern = context
             .protocol_version()
             .is_some_and(|v| !v.has_initialize());
+        let sink = if self.mount.tunnel_mode == crate::config::TunnelMode::Local {
+            context
+                .meta
+                .get_progress_token()
+                .map(|token| crate::upstream::progress::ProgressSink {
+                    peer: context.peer.clone(),
+                    token,
+                })
+        } else {
+            None
+        };
         let mut value = if modern {
             let child = UpstreamChild::spawn(
                 &self.mount.command,
@@ -36,7 +47,7 @@ impl Bridge {
                 ErrorData::internal_error("upstream startup failed; run mcptunnel doctor", None)
             })?;
             let result = child
-                .request(method, params, context.meta, &context.ct)
+                .request_with_progress(method, params, context.meta, &context.ct, sink)
                 .await;
             child.shutdown().await;
             result?
@@ -58,10 +69,16 @@ impl Bridge {
                     ErrorData::invalid_request("session expired; initialize again", None)
                 })?;
             child
-                .request(method, params, context.meta, &context.ct)
+                .request_with_progress(method, params, context.meta, &context.ct, sink)
                 .await?
         };
         if modern {
+            if value.get("resultType").is_some_and(|v| v != "complete") {
+                return Err(ErrorData::invalid_params(
+                    "interactive upstream results are unsupported by this bridge",
+                    None,
+                ));
+            }
             value["resultType"] = json!("complete");
             if value.get("_meta").is_none() {
                 value["_meta"] = json!({});
@@ -93,7 +110,9 @@ impl Bridge {
             .and_then(|p| p.capabilities.clone())
             .unwrap_or(json!({}));
         if let Some(obj) = value.as_object_mut() {
-            obj.retain(|key, _| ["tools", "resources", "prompts"].contains(&key.as_str()));
+            obj.retain(|key, _| {
+                ["tools", "resources", "prompts", "completions"].contains(&key.as_str())
+            });
             if !self.mount.policy.expose_resources {
                 obj.remove("resources");
             }
@@ -268,6 +287,17 @@ impl ServerHandler for Bridge {
         params: CompleteRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CompleteResult, ErrorData> {
+        if params
+            .r#ref
+            .as_prompt_name()
+            .is_some_and(|name| !filter::is_prompt_allowed(&self.mount.policy, name))
+            || params
+                .r#ref
+                .as_resource_uri()
+                .is_some_and(|uri| !filter::is_resource_allowed(&self.mount.policy, uri))
+        {
+            return Err(Self::denied());
+        }
         self.forward("completion/complete", params, context).await
     }
 }
