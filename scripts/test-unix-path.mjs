@@ -16,13 +16,36 @@ export function testUnixPath({ root, run, version }) {
   if (process.env.MCPTUNNEL_TEST_FISH === '1') assert(shells.includes('fish'), 'Fish verification was requested');
   const verified = [];
 
+  function shellRun(f, flags, command) {
+    const env = { ...process.env };
+    for (const variable of ['ZDOTDIR', 'ENV', 'BASH_ENV']) delete env[variable];
+    return spawnSync(f.env.SHELL, [...flags, '-c', command], {
+      encoding: 'utf8', env: { ...env, ...f.env, PATH: f.prefix + ':' + process.env.PATH },
+    });
+  }
+
+  function pathEntries(result) {
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return result.stdout.match(/__MCPTUNNEL_PATH__(.*)/)[1].split(':');
+  }
+
   function fixture(name, shell, extra = {}) {
     const home = path.join(root, name, "home with 'quotes' $literal `ticks` \\backslash");
     const bin = path.join(home, 'bin');
     fs.mkdirSync(bin, { recursive: true });
     const env = { HOME: home, SHELL: available(shell).stdout.trim(), XDG_CONFIG_HOME: path.join(home, 'custom config'), ...extra };
     const install = path.join(home, "install with 'quotes' $literal `ticks` \\backslash [glob]*");
-    return { home, bin, env, install };
+    const prefix = path.join(home, 'previous path entry');
+    fs.mkdirSync(prefix);
+    const f = { home, bin, env, install, prefix, baseline: new Map() };
+    const modes = shell === 'fish' ? [[], ['-i']] : [['-i'], ['-l'], ['-l', '-i']];
+    const command = shell === 'fish'
+      ? "printf '__MCPTUNNEL_PATH__%s\\n' (string join : $PATH)"
+      : "printf '__MCPTUNNEL_PATH__%s\\n' \"$PATH\"";
+    // Capture native startup before installation. macOS path_helper can change
+    // inherited PATH (including special characters) before our profiles run.
+    for (const flags of modes) f.baseline.set(flags.join(), pathEntries(shellRun(f, flags, command)));
+    return f;
   }
 
   function profilesFor(f) {
@@ -56,8 +79,6 @@ export function testUnixPath({ root, run, version }) {
 
   function checkShell(f, flags, install = f.install) {
     const fish = path.basename(f.env.SHELL) === 'fish';
-    const prefix = path.join(f.home, 'previous path entry');
-    fs.mkdirSync(prefix, { recursive: true });
     const envFile = path.join(f.home, '.local/share/mcptunnel', fish ? 'env.fish' : 'env');
     // Real startup must find the binary with no pre-existing installation on PATH.
     // Source again twice to ensure activation never repeats the directory or
@@ -65,22 +86,12 @@ export function testUnixPath({ root, run, version }) {
     const command = fish
       ? `mcptunnel --version; or exit 31; set -l before $PATH; source ${quoteFish(envFile)}; source ${quoteFish(envFile)}; test (count $before) = (count $PATH); or exit 32; printf '__MCPTUNNEL_PATH__%s\\n' (string join : $PATH)`
       : `mcptunnel --version || exit 31; before=$PATH; . ${quote(envFile)}; . ${quote(envFile)}; [ "$PATH" = "$before" ] || exit 32; printf '__MCPTUNNEL_PATH__%s\\n' "$PATH"`;
-    const env = { ...process.env };
-    for (const variable of ['ZDOTDIR', 'ENV', 'BASH_ENV']) delete env[variable];
-    const result = spawnSync(f.env.SHELL, [...flags, '-c', command], {
-      encoding: 'utf8', env: { ...env, ...f.env, PATH: prefix + ':' + process.env.PATH },
-    });
+    const result = shellRun(f, flags, command);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert(result.stdout.includes('mcptunnel ' + version), 'New shell did not run the installed binary');
-    const entries = result.stdout.match(/__MCPTUNNEL_PATH__(.*)/)[1].split(':');
+    const entries = pathEntries(result);
     assert.equal(entries.filter(entry => entry === install).length, 1, 'Installed directory missing or duplicated');
-    assert(entries.includes(prefix), 'Existing PATH entry was lost');
-    const inherited = (prefix + ':' + process.env.PATH).split(':');
-    // Login shells may run the OS path helper; exact preservation is checked
-    // separately by sourcing our env from a shell without startup files.
-    if (!flags.includes('-l')) {
-      assert.deepEqual(entries.filter(entry => entry !== install), inherited, 'Existing PATH was changed');
-    }
+    assert.deepEqual(entries.filter(entry => entry !== install), f.baseline.get(flags.join()), 'Installer changed the shell startup PATH');
   }
 
   for (const shell of shells) {
