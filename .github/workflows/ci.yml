@@ -1,9 +1,35 @@
 name: Rust and MCP verification
 on:
   push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'examples/**'
+      - 'scripts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/**'
   pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'examples/**'
+      - 'scripts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/**'
   workflow_dispatch:
+    inputs:
+      full:
+        description: 'Run all three OSes, release builds and official conformance (uses additional Actions quota)'
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      full:
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -11,10 +37,11 @@ concurrency:
   cancel-in-progress: true
 jobs:
   rust:
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(inputs.full && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +49,7 @@ jobs:
         with:
           toolchain: '1.88.0'
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -29,10 +57,19 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - run: cargo test --locked --all-targets
+      - run: cargo build --locked --bin mcptunnel --example fake_cloudflared
       - run: cargo build --locked --release
-      - run: cargo build --locked --example fake_cloudflared
-      - run: node scripts/smoke-routing.mjs
+        if: inputs.full
+      - name: Test routing using the selected build profile
+        shell: bash
+        run: |
+          profile=debug
+          if [[ "${{ inputs.full }}" == true ]]; then profile=release; fi
+          suffix=
+          if [[ "$RUNNER_OS" == Windows ]]; then suffix=.exe; fi
+          node scripts/smoke-routing.mjs "target/$profile/mcptunnel$suffix"
       - uses: actions/upload-artifact@v4
+        if: inputs.full
         with:
           name: mcptunnel-${{ matrix.os }}
           path: |
@@ -40,12 +77,15 @@ jobs:
             target/release/mcptunnel.exe
           if-no-files-found: error
   applicable-conformance:
+    if: inputs.full
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.88.0'
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

@@ -2,6 +2,14 @@
 
 End users install from [GitHub Releases](https://github.com/mcptunnel/mcptunnel/releases), not Cargo. The release archives contain mcptunnel, its README and MIT license. Cloudflared is downloaded separately from Cloudflare's official release by the installer.
 
+## Actions budget
+
+Both Actions workflows are currently disabled to stop quota consumption. Keep verification local until the user explicitly authorizes enabling or running Actions. A commit/push request alone does not authorize cloud verification or a release tag. Follow [the repository budget instructions](../AGENTS.md).
+
+After authorization to enable automatic CI, source pushes to `main` and pull requests run one Linux job: fmt, strict Clippy, all-target tests, a debug build and routing smoke. Branch pushes do not duplicate PR checks; documentation-only changes do not start CI. Rust dependency/build caches and job time limits bound repeated work. Automatic CI does not produce release builds or uploaded binaries.
+
+Use the manual CI input `full=true` only for explicitly requested full verification. It enables three OSes, release builds and official conformance. An authorized release tag passes that same full input through the reusable workflow and builds all five native archives. Manual candidate builds also require explicit authorization; a newer candidate on the same branch cancels the previous one.
+
 ## Targets
 
 | Archive target | Native build / verification runner | Runtime |
