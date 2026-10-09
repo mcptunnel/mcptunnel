@@ -1,5 +1,7 @@
 # mcptunnel
 
+<img src="assets/mcptunnel-icon.svg" alt="mcptunnel icon" width="112" height="112" />
+
 Bridge a local stdio MCP server to Streamable HTTP. Modern clients can invoke legacy stdio tools without initializing a remote session; legacy clients retain isolated initialization sessions.
 
 **Localhost is the default. Add `--public` for a free temporary Cloudflare HTTPS URL. Basic authentication is enabled in both modes.**
