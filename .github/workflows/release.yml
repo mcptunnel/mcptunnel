@@ -43,7 +43,12 @@ jobs:
           node -e 'const fs=require("fs"); const version=fs.readFileSync("Cargo.toml","utf8").match(/^version = "([^"]+)"/m)[1]; if(process.env.GITHUB_REF_TYPE==="tag" && process.env.GITHUB_REF_NAME!=="v"+version) throw Error("Tag and package version differ"); fs.accessSync("docs/releases/v"+version+".md");'
       - run: cargo build --locked --release --target ${{ matrix.target }}
       - run: node scripts/package-release.mjs ${{ matrix.target }}
+      - name: Install fish for native PATH verification
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes fish
       - run: node scripts/test-release.mjs ${{ matrix.target }}
+        env:
+          MCPTUNNEL_TEST_FISH: ${{ runner.os == 'Linux' && '1' || '0' }}
       - name: Install real official Filesystem MCP
         run: npm exec --yes --package=@modelcontextprotocol/server-filesystem@2026.8.31 -- node --version
       - name: Test release binary against real Filesystem MCP

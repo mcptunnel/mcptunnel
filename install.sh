@@ -5,6 +5,12 @@ version=${MCPTUNNEL_VERSION:-latest}
 install_dir=${MCPTUNNEL_INSTALL_DIR:-"$HOME/.local/bin"}
 assets_dir=${MCPTUNNEL_ASSET_DIR:-}
 repository=https://github.com/mcptunnel/mcptunnel
+case "$install_dir" in /*) ;; *) install_dir=$(pwd -P)/$install_dir ;; esac
+# PATH entries cannot contain separators or line breaks. Reject them before writes.
+case "$install_dir" in
+  *:*|*'
+'*|*"$(printf '\r')"*) echo 'Install directory cannot contain colons or line breaks.' >&2; exit 1 ;;
+esac
 case "$(uname -s)" in
   Linux) os=linux; suffix=unknown-linux-gnu ;;
   Darwin) os=darwin; suffix=apple-darwin ;;
@@ -61,9 +67,82 @@ if [ "${MCPTUNNEL_SKIP_CLOUDFLARED:-0}" != 1 ] && ! command -v cloudflared >/dev
   chmod +x "$cloudflared"
 fi
 mkdir -p "$install_dir"
+install_dir=$(CDPATH= cd "$install_dir" && pwd -P)
 cp "$binary" "$install_dir/mcptunnel"
 chmod +x "$install_dir/mcptunnel"
 if [ -n "$cloudflared" ]; then cp "$cloudflared" "$install_dir/cloudflared"; chmod +x "$install_dir/cloudflared"; fi
 printf 'Installed mcptunnel %s in %s\n' "$version" "$install_dir"
-case ":$PATH:" in *":$install_dir:"*) ;; *) printf 'Add to your shell profile: export PATH="%s:$PATH"\n' "$install_dir" ;; esac
+
+# Keep profile edits small and stable; reinstalling updates only our env file.
+# Quote literal paths rather than evaluating shell metacharacters in directory names.
+quote_sh() { printf "'"; printf '%s' "$1" | sed "s/'/'\\\\''/g"; printf "'"; }
+quote_fish() { printf "'"; printf '%s' "$1" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\\'/g"; printf "'"; }
+add_profile() {
+  profile=$1
+  mkdir -p "$(dirname "$profile")"
+  if [ ! -f "$profile" ] || ! grep -Fqx "$source_line" "$profile"; then
+    # Start with a newline even when an existing profile lacks its final newline.
+    printf '\n# mcptunnel PATH\n%s\n' "$source_line" >> "$profile"
+  fi
+  printf 'PATH configured in %s\n' "$profile"
+}
+if [ "${MCPTUNNEL_NO_PATH:-0}" != 1 ]; then
+  env_dir=$HOME/.local/share/mcptunnel
+  mkdir -p "$env_dir"
+  quoted_install=$(quote_sh "$install_dir")
+  # A quoted case pattern tests the exact entry, including literal glob characters.
+  {
+    printf '# mcptunnel PATH; maintained by install.sh\n'
+    printf 'case ":$PATH:" in\n  *:%s:*) ;;\n  *) export PATH=%s:"$PATH" ;;\nesac\n' "$quoted_install" "$quoted_install"
+  } > "$temp_dir/env"
+  cp "$temp_dir/env" "$env_dir/env"
+  quoted_fish_install=$(quote_fish "$install_dir")
+  {
+    printf '# mcptunnel PATH; maintained by install.sh\n'
+    printf 'if not contains -- %s $PATH\n    set -gx PATH %s $PATH\nend\n' "$quoted_fish_install" "$quoted_fish_install"
+  } > "$temp_dir/env.fish"
+  cp "$temp_dir/env.fish" "$env_dir/env.fish"
+  quoted_env=$(quote_sh "$env_dir/env")
+  source_line="[ ! -f $quoted_env ] || . $quoted_env"
+  shell_name=${SHELL:-}
+  shell_name=${shell_name##*/}
+  if [ -z "$shell_name" ] && [ "$os" = darwin ]; then shell_name=zsh; fi
+  case "$shell_name" in
+    zsh)
+      zdot_dir=${ZDOTDIR:-$HOME}
+      # ZDOTDIR may be set inside .zshenv without being exported to this installer.
+      if [ -z "${ZDOTDIR:-}" ] && command -v "${SHELL:-zsh}" >/dev/null; then
+        zdot_dir=$("${SHELL:-zsh}" -c 'printf "%s" "${ZDOTDIR:-$HOME}"')
+      fi
+      add_profile "$zdot_dir/.zprofile"
+      add_profile "$zdot_dir/.zshrc"
+      ;;
+    bash)
+      # Bash reads only the first existing login profile; do not create one that
+      # would hide an existing .bash_login or .profile.
+      login_profile=$HOME/.profile
+      for candidate in .bash_profile .bash_login .profile; do
+        if [ -f "$HOME/$candidate" ]; then login_profile=$HOME/$candidate; break; fi
+      done
+      add_profile "$login_profile"
+      add_profile "$HOME/.bashrc"
+      ;;
+    fish)
+      fish_profile=${XDG_CONFIG_HOME:-"$HOME/.config"}/fish/conf.d/mcptunnel.fish
+      quoted_env=$(quote_fish "$env_dir/env.fish")
+      source_line="test ! -f $quoted_env; or source $quoted_env"
+      add_profile "$fish_profile"
+      ;;
+    sh|dash|ash|ksh|'') add_profile "$HOME/.profile" ;;
+    *)
+      printf 'Automatic PATH setup does not support %s. Run the installed binary at %s/mcptunnel.\n' "$shell_name" "$install_dir" >&2
+      exit 1
+      ;;
+  esac
+  printf '\nOpen a new terminal to use mcptunnel, or activate it in this terminal:\n  '
+  if [ "$shell_name" = fish ]; then printf 'source %s\n' "$quoted_env"
+  else printf '. %s\n' "$quoted_env"; fi
+else
+  echo 'PATH setup skipped (MCPTUNNEL_NO_PATH=1).'
+fi
 echo 'Next: https://github.com/mcptunnel/mcptunnel#quick-start'

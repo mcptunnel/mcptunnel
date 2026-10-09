@@ -19,11 +19,11 @@ mcptunnel --version
 
 ```sh
 curl -fsSL https://github.com/mcptunnel/mcptunnel/releases/latest/download/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
-mcptunnel --version
 ```
 
-Windows installs into `%LOCALAPPDATA%\mcptunnel\bin` and adds it to your user PATH. macOS/Linux installs into `~/.local/bin`; add the shown export to your shell profile for future terminals. Neither installer needs administrator access.
+Open a new terminal, then run `mcptunnel --version`. To keep using the current terminal, run the activation command printed by the installer instead.
+
+Windows installs into `%LOCALAPPDATA%\mcptunnel\bin` and adds it to your user PATH. macOS/Linux installs into `~/.local/bin` and automatically registers it in your zsh, bash or fish startup files. Existing PATH entries and shell settings are preserved; reinstalling does not duplicate them. Neither installer needs administrator access.
 
 Prefer a manual download? [Get the archive for your OS and CPU](https://github.com/mcptunnel/mcptunnel/releases/latest), check `SHA256SUMS`, extract it, and put the executable on PATH. Releases cover Windows x64, macOS Intel/Apple Silicon, and Linux x64/ARM64. Linux requires OpenSSL 3 and glibc 2.35+ on x64 (Ubuntu 22.04+) or glibc 2.39+ on ARM64 (Ubuntu 24.04+); Alpine/musl is not supported. MCP servers still require their own runtime. The example below requires [Node.js 22+](https://nodejs.org/en/download).
 

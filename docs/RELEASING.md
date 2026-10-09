@@ -31,7 +31,14 @@ For a candidate build without publication, run the native-binary workflow manual
 
 PowerShell: download install.ps1 and run with -Version vX.Y.Z, -InstallDir PATH, -NoPath, or -SkipCloudflared. Offline installation accepts -AssetsDirectory PATH and requires an explicit version.
 
-Shell: MCPTUNNEL_VERSION, MCPTUNNEL_INSTALL_DIR, MCPTUNNEL_SKIP_CLOUDFLARED=1, and MCPTUNNEL_ASSET_DIR control the same settings. The shell installer prints PATH guidance without editing shell profiles.
+Shell: `MCPTUNNEL_VERSION`, `MCPTUNNEL_INSTALL_DIR`, `MCPTUNNEL_SKIP_CLOUDFLARED=1`, `MCPTUNNEL_NO_PATH=1`, and `MCPTUNNEL_ASSET_DIR` control the same settings. By default, the installer writes idempotent activation scripts to `~/.local/share/mcptunnel/env` and `env.fish`, then adds a guarded source line to the selected shell's startup files. It preserves existing profile content and PATH entries. Reinstalling or changing the install directory updates the activation scripts without duplicating profile entries. `MCPTUNNEL_NO_PATH=1` skips all activation/profile writes.
+
+- zsh: `.zprofile` and `.zshrc` under `ZDOTDIR` (or HOME); a `ZDOTDIR` set inside `.zshenv` is detected too.
+- bash: `.bashrc` and the first existing login file among `.bash_profile`, `.bash_login`, `.profile`; when none exists, creates `.profile`.
+- fish: `$XDG_CONFIG_HOME/fish/conf.d/mcptunnel.fish`, defaulting to `~/.config/fish/conf.d/mcptunnel.fish`.
+- sh/dash/ash/ksh: `.profile`. Other shells report that automatic setup is unsupported; use `MCPTUNNEL_NO_PATH=1` for manual installation.
+
+New terminals pick up PATH automatically. A piped installer cannot modify its parent shell, so it prints a shell-specific source command for optional immediate activation. Startup-file selection follows the [zsh manual](https://zsh.sourceforge.io/Doc/Release/Files.html), [bash manual](https://www.gnu.org/software/bash/manual/html_node/Bash-Startup-Files), and [fish configuration rules](https://fishshell.com/docs/current/language.html#configuration-files); the shared activation-file approach is also used by [rustup](https://github.com/rust-lang/rustup/blob/main/src/cli/self_update/shell.rs).
 
 Offline assets must include the matching archive and SHA256SUMS. Both installers reject mismatches before writing executables or changing PATH. SHA256SUMS checks download integrity; it is not an independent publisher signature. The installer script itself must come from the trusted repository/release.
 
