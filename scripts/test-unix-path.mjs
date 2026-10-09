@@ -65,8 +65,10 @@ export function testUnixPath({ root, run, version }) {
     const command = fish
       ? `mcptunnel --version; or exit 31; set -l before $PATH; source ${quoteFish(envFile)}; source ${quoteFish(envFile)}; test (count $before) = (count $PATH); or exit 32; printf '__MCPTUNNEL_PATH__%s\\n' (string join : $PATH)`
       : `mcptunnel --version || exit 31; before=$PATH; . ${quote(envFile)}; . ${quote(envFile)}; [ "$PATH" = "$before" ] || exit 32; printf '__MCPTUNNEL_PATH__%s\\n' "$PATH"`;
+    const env = { ...process.env };
+    for (const variable of ['ZDOTDIR', 'ENV', 'BASH_ENV']) delete env[variable];
     const result = spawnSync(f.env.SHELL, [...flags, '-c', command], {
-      encoding: 'utf8', env: { ...process.env, ...f.env, PATH: prefix + ':' + process.env.PATH, ENV: '', BASH_ENV: '', ZDOTDIR: f.env.ZDOTDIR || '' },
+      encoding: 'utf8', env: { ...env, ...f.env, PATH: prefix + ':' + process.env.PATH },
     });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert(result.stdout.includes('mcptunnel ' + version), 'New shell did not run the installed binary');

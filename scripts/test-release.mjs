@@ -17,7 +17,9 @@ const home = path.join(temp, 'isolated home');
 fs.mkdirSync(home);
 function run(directory, overrides = {}) {
   if (windows) return spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.resolve('install.ps1'), '-Version', 'v' + version, '-InstallDir', directory, '-AssetsDirectory', assets, '-NoPath', '-SkipCloudflared'], { encoding: 'utf8', windowsHide: true });
-  return spawnSync('sh', [path.resolve('install.sh')], { encoding: 'utf8', env: { ...process.env, HOME: home, SHELL: '/bin/sh', ZDOTDIR: '', XDG_CONFIG_HOME: path.join(home, '.config'), ENV: '', BASH_ENV: '', MCPTUNNEL_NO_PATH: '0', ...overrides, MCPTUNNEL_VERSION: 'v' + version, MCPTUNNEL_INSTALL_DIR: directory, MCPTUNNEL_ASSET_DIR: assets, MCPTUNNEL_SKIP_CLOUDFLARED: '1' } });
+  const env = { ...process.env, HOME: home, SHELL: '/bin/sh', XDG_CONFIG_HOME: path.join(home, '.config'), MCPTUNNEL_NO_PATH: '0' };
+  for (const variable of ['ZDOTDIR', 'ENV', 'BASH_ENV']) delete env[variable];
+  return spawnSync('sh', [path.resolve('install.sh')], { encoding: 'utf8', env: { ...env, ...overrides, MCPTUNNEL_VERSION: 'v' + version, MCPTUNNEL_INSTALL_DIR: directory, MCPTUNNEL_ASSET_DIR: assets, MCPTUNNEL_SKIP_CLOUDFLARED: '1' } });
 }
 try {
   fs.mkdirSync(assets);
