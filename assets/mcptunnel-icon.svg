@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>mcptunnel — Portal icon</title>
+  <rect width="1024" height="1024" rx="228" fill="#0B1324"/>
+  <defs>
+    <linearGradient id="outer" x1="240" y1="180" x2="780" y2="780" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7AA7FF"/>
+      <stop offset="1" stop-color="#3669F6"/>
+    </linearGradient>
+    <linearGradient id="inner" x1="430" y1="320" x2="620" y2="770" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A9FFF2"/>
+      <stop offset="1" stop-color="#47D9EC"/>
+    </linearGradient>
+  </defs>
+  <path d="M253 737V438C253 295 368 196 512 196C656 196 771 295 771 438V737" stroke="url(#outer)" stroke-width="102" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M403 737V461C403 398 451 351 512 351C573 351 621 398 621 461V737" stroke="url(#inner)" stroke-width="94" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
