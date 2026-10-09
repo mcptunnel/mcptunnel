@@ -61,39 +61,22 @@ mcptunnel [options] -- <mcp-command> [args...]
 For example, run the official [Sequential Thinking MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking). With [Node.js 22+](https://nodejs.org/en/download) installed, launch it directly:
 
 ```sh
-# Localhost, with the default port and an automatic path.
+# Localhost
 mcptunnel -- npx -y @modelcontextprotocol/server-sequential-thinking
+# → http://localhost:8000/sequential-thinking
 
-# Another server on the same port, at a path you choose.
+# Custom path, same port
 mcptunnel --path /thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
+# → http://localhost:8000/thinking
 
-# Another port creates a separate listener.
+# Another port
 mcptunnel --port 9000 -- npx -y @modelcontextprotocol/server-sequential-thinking
+# → http://localhost:9000/sequential-thinking
 
-# Share a server over public HTTPS.
+# Public HTTPS
 mcptunnel --public --path /public-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
+# → https://<random>.trycloudflare.com/public-thinking
 ```
-
-These commands work in PowerShell, bash and zsh. Each registers a separate server and returns to your terminal. The first command prints:
-
-```text
-Mount created: sequential-thinking
-Tunnel mode: local
-Auth mode: basic
-MCP URL:
-http://localhost:8000/sequential-thinking
-
-Authorization header (store privately; shown only at creation):
-Authorization: Basic <authorization>
-```
-
-The final `--public` command prints a public MCP URL and its own Authorization header:
-
-```text
-https://<random>.trycloudflare.com/public-thinking
-```
-
-`<random>` and `<authorization>` are placeholders; actual output contains your URL and credentials. The first `npx` run downloads the MCP server. If that download delays startup, [cache the package and retry](docs/USER_GUIDE.md#ports-and-paths).
 
 ## Connect your client
 
