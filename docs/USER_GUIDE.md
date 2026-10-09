@@ -65,7 +65,7 @@ After publication, you can also [download the archive for your OS and CPU](https
 | Linux x64 | `x86_64-unknown-linux-gnu` | glibc 2.35+, OpenSSL 3; Ubuntu 22.04+ |
 | Linux ARM64 | `aarch64-unknown-linux-gnu` | glibc 2.39+, OpenSSL 3; Ubuntu 24.04+ |
 
-Archives are not code-signed or Apple-notarized. Follow your operating system's normal approval procedure for downloaded executables. Alpine/musl and native Windows ARM64 builds are unavailable. MCP servers need their own runtime; the official Filesystem quick start requires Node.js 22+.
+Archives are not code-signed or Apple-notarized. Follow your operating system's normal approval procedure for downloaded executables. Alpine/musl and native Windows ARM64 builds are unavailable. MCP servers need their own runtime; the README quick start and Filesystem examples below use Node.js 22+.
 
 ## Ports and paths
 
@@ -79,7 +79,7 @@ Paths are inferred from common package/executable names: Filesystem → `/filesy
 
 Local and public servers may share a port. Only `--public` servers enter its Cloudflare ingress; local routes, inspection and OAuth metadata are excluded. Public servers on the same port share one temporary origin; different ports use separate origins. The last public server's removal stops its tunnel, and the last server's removal closes its listener. Ports, paths and visibility survive daemon restart; Quick origins can change. Existing pre-0.3 mounts retain their old port and `/slug/mcp` path.
 
-The package version is pinned to the real server used in verification. The first `npx` run downloads it. On a slow connection, cache it first with `npm exec --yes --package=@modelcontextprotocol/server-filesystem@2026.8.31 -- node --version`, then repeat the command. The mount captures the creating CLI's working directory; `--cwd` overrides it. Windows `npx` launchers are resolved automatically.
+The first `npx` run downloads the requested MCP server. On a slow connection, cache the README example first with `npm exec --yes --package=@modelcontextprotocol/server-sequential-thinking -- node --version`, then repeat the command. The Filesystem-specific examples below pin the version used in their recorded verification. The mount captures the creating CLI's working directory; `--cwd` overrides it. Windows `npx` launchers are resolved automatically.
 
 ## Connecting clients
 
@@ -91,9 +91,10 @@ Public mode prints the provider's announced URL; DNS can take a moment to become
 
 ## Restrict, inspect, stop
 
-For a read-only Filesystem endpoint, allow only the two intended tools:
+For a read-only Filesystem endpoint, create a directory you intend to share and allow only the two intended tools:
 
 ```sh
+mkdir shared
 mcptunnel --slug readonly --path /readonly --allow-tool read_text_file --allow-tool list_directory -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./shared
 mcptunnel list
 mcptunnel inspect readonly

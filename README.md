@@ -52,32 +52,36 @@ See [supported platforms and requirements](docs/USER_GUIDE.md#platform-requireme
 
 ## Quick start
 
-Use the official [Filesystem MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem). Install [Node.js 22+](https://nodejs.org/en/download), then create a `shared` directory containing files you want this server to access:
+Pass your MCP server command after `--`, with any mcptunnel options before it:
+
+```text
+mcptunnel [options] -- <mcp-command> [args...]
+```
+
+For example, run the official [Sequential Thinking MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking). With [Node.js 22+](https://nodejs.org/en/download) installed, launch it directly:
 
 ```sh
-mkdir shared
-
 # Localhost, with the default port and an automatic path.
-mcptunnel -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./shared
+mcptunnel -- npx -y @modelcontextprotocol/server-sequential-thinking
 
 # Another server on the same port, at a path you choose.
-mcptunnel --path /documents -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./shared
+mcptunnel --path /thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
 
 # Another port creates a separate listener.
-mcptunnel --port 9000 -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./shared
+mcptunnel --port 9000 -- npx -y @modelcontextprotocol/server-sequential-thinking
 
 # Share a server over public HTTPS.
-mcptunnel --public --path /public-files -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./shared
+mcptunnel --public --path /public-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
 ```
 
 These commands work in PowerShell, bash and zsh. Each registers a separate server and returns to your terminal. The first command prints:
 
 ```text
-Mount created: filesystem
+Mount created: sequential-thinking
 Tunnel mode: local
 Auth mode: basic
 MCP URL:
-http://localhost:8000/filesystem
+http://localhost:8000/sequential-thinking
 
 Authorization header (store privately; shown only at creation):
 Authorization: Basic <authorization>
@@ -86,10 +90,10 @@ Authorization: Basic <authorization>
 The final `--public` command prints a public MCP URL and its own Authorization header:
 
 ```text
-https://<random>.trycloudflare.com/public-files
+https://<random>.trycloudflare.com/public-thinking
 ```
 
-`<random>` and `<authorization>` are placeholders; actual output contains your URL and credentials. The first `npx` run downloads the pinned, verified server version.
+`<random>` and `<authorization>` are placeholders; actual output contains your URL and credentials. The first `npx` run downloads the MCP server. If that download delays startup, [cache the package and retry](docs/USER_GUIDE.md#ports-and-paths).
 
 ## Connect your client
 
@@ -107,15 +111,15 @@ All three flags are optional:
 | `--port <port>` | `8000` | Same port shares a listener; another port opens another listener |
 | `--path <path>` | `/<server-name>` | Sets the exact MCP path, with no added `/mcp` suffix |
 
-Automatic name collisions get a suffix such as `/filesystem-2`. Explicit duplicate paths on the same port fail. Public and local servers can share a port; only public servers enter the Cloudflare tunnel. [Routing and persistence details](docs/USER_GUIDE.md#ports-and-paths).
+Automatic name collisions get a suffix such as `/sequential-thinking-2`. Explicit duplicate paths on the same port fail. Public and local servers can share a port; only public servers enter the Cloudflare tunnel. [Routing and persistence details](docs/USER_GUIDE.md#ports-and-paths).
 
 ## Manage your servers
 
 ```sh
 mcptunnel list
-mcptunnel inspect filesystem
-mcptunnel doctor filesystem
-mcptunnel stop filesystem
+mcptunnel inspect sequential-thinking
+mcptunnel doctor sequential-thinking
+mcptunnel stop sequential-thinking
 ```
 
 Use the mount name printed at creation or by `list`. You can also allow or deny individual tools, restrict resources and prompts, and configure an external OAuth issuer. [Access controls and management](docs/USER_GUIDE.md#restrict-inspect-stop).
