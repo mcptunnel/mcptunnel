@@ -1,0 +1,109 @@
+{
+  "kind": "verified-installer-path-release-candidate",
+  "version": "0.3.1",
+  "verifiedAtUtc": "2026-10-09T00:22:33.952Z",
+  "implementationCommit": "9fc183e91b3ae382acc297e26971f7840230e3a8",
+  "sourceCommit": "e4446eccb6f77e1da83f710de5ba94c175d1d8ae",
+  "nativeWorkflowRun": "https://github.com/mcptunnel/mcptunnel/actions/runs/37863330366",
+  "rustCi": {
+    "status": "PASS",
+    "workflowRun": "https://github.com/mcptunnel/mcptunnel/actions/runs/37863297281",
+    "platforms": [
+      "Linux",
+      "macOS",
+      "Windows"
+    ],
+    "testsPerPlatform": 66,
+    "supportedConformanceScenarios": 50,
+    "fmt": "PASS",
+    "strictClippy": "PASS",
+    "releaseBuild": "PASS",
+    "routingSmoke": "PASS"
+  },
+  "unixPathChecks": [
+    "actual native release archives in isolated HOME directories",
+    "bash and zsh login, interactive and login-interactive startup",
+    "fish non-interactive and interactive startup",
+    "existing PATH order compared with native startup before installation",
+    "literal spaces, quotes, dollars, backticks, backslashes and glob characters in paths",
+    "existing profile content without a final newline preserved",
+    "already on installer PATH still registers persistent activation",
+    "reinstall and repeated activation do not duplicate entries",
+    "relocation updates activation files without changing profile entries",
+    "existing bash login profile precedence preserved",
+    "exported and .zshenv-defined ZDOTDIR",
+    "fish XDG_CONFIG_HOME",
+    "POSIX activation and absent SHELL",
+    "MCPTUNNEL_NO_PATH skips activation/profile writes",
+    "read-only profile reports failure",
+    "PATH separators and line breaks rejected before writes",
+    "corrupt archive rejected before binary or profile writes"
+  ],
+  "archives": [
+    {
+      "name": "mcptunnel-v0.3.1-aarch64-apple-darwin.tar.gz",
+      "sha256": "957279027daf9131f0deb80e7cbcebaee80ebd481862d55c813b5983b7209815",
+      "build": "PASS",
+      "realArchiveInstaller": "PASS",
+      "officialFilesystemMcp": "PASS",
+      "unixPathSetup": "PASS",
+      "shellsVerified": [
+        "bash",
+        "zsh",
+        "POSIX activation"
+      ]
+    },
+    {
+      "name": "mcptunnel-v0.3.1-aarch64-unknown-linux-gnu.tar.gz",
+      "sha256": "a18886c22f4886f1a0ae95a2098fd6773aa68861358f519df83db5117dae4906",
+      "build": "PASS",
+      "realArchiveInstaller": "PASS",
+      "officialFilesystemMcp": "PASS",
+      "unixPathSetup": "PASS",
+      "shellsVerified": [
+        "bash",
+        "fish",
+        "POSIX activation"
+      ]
+    },
+    {
+      "name": "mcptunnel-v0.3.1-x86_64-apple-darwin.tar.gz",
+      "sha256": "2bb5f82b0fe87c12352cfeb4a51c412ec1811779f3f60307194016ea1974ecc2",
+      "build": "PASS",
+      "realArchiveInstaller": "PASS",
+      "officialFilesystemMcp": "PASS",
+      "unixPathSetup": "PASS",
+      "shellsVerified": [
+        "bash",
+        "zsh",
+        "POSIX activation"
+      ]
+    },
+    {
+      "name": "mcptunnel-v0.3.1-x86_64-pc-windows-msvc.zip",
+      "sha256": "a365a17696f762d41704ea33e1ed4f92910ad04ac4da63ceeb92edcea9cd16f3",
+      "build": "PASS",
+      "realArchiveInstaller": "PASS",
+      "officialFilesystemMcp": "PASS",
+      "unixPathSetup": "not applicable",
+      "shellsVerified": []
+    },
+    {
+      "name": "mcptunnel-v0.3.1-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "d740ec119a3f5ebf4289a672edd9d0f70277e49ebc5fded211f8077867b587de",
+      "build": "PASS",
+      "realArchiveInstaller": "PASS",
+      "officialFilesystemMcp": "PASS",
+      "unixPathSetup": "PASS",
+      "shellsVerified": [
+        "bash",
+        "fish",
+        "POSIX activation"
+      ]
+    }
+  ],
+  "publication": {
+    "published": false,
+    "kind": "Actions candidate artifacts; no version tag or GitHub Release created"
+  }
+}
