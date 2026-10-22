@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-22T18:26:39.594Z",
+  "binaryVersion": "mcptunnel 0.3.5",
+  "clientVersion": "codex-cli 0.146.0",
+  "clientExitCode": 0,
+  "upstream": "@modelcontextprotocol/server-filesystem@2026.8.31",
+  "transport": "local HTTP via observation-only loopback proxy",
+  "auth": "Basic from process environment",
+  "wire": [
+    {
+      "httpMethod": "POST",
+      "method": "initialize",
+      "requestedProtocol": "2025-06-18",
+      "clientInfo": {
+        "name": "codex-mcp-client",
+        "title": "Codex",
+        "version": "0.146.0"
+      },
+      "authenticated": true,
+      "status": 200
+    },
+    {
+      "httpMethod": "POST",
+      "method": "notifications/initialized",
+      "protocolHeader": "2025-06-18",
+      "authenticated": true,
+      "status": 202
+    },
+    {
+      "httpMethod": "GET",
+      "protocolHeader": "2025-06-18",
+      "authenticated": true,
+      "status": 405
+    },
+    {
+      "httpMethod": "POST",
+      "method": "tools/list",
+      "protocolHeader": "2025-06-18",
+      "authenticated": true,
+      "status": 200
+    },
+    {
+      "httpMethod": "POST",
+      "method": "tools/call",
+      "protocolHeader": "2025-06-18",
+      "authenticated": true,
+      "status": 200
+    },
+    {
+      "httpMethod": "DELETE",
+      "protocolHeader": "2025-06-18",
+      "authenticated": true,
+      "status": 204
+    }
+  ],
+  "calls": [
+    {
+      "server": "audit",
+      "tool": "read_text_file",
+      "status": "completed",
+      "resultMatches": true
+    }
+  ],
+  "finalMatches": true,
+  "scope": "One existing authenticated Codex CLI account; initialization, tool discovery, read_text_file and session deletion only. No global client configuration changed. Instrumentation proxy forwarded requests and recorded only protocol/method/status/auth-present evidence; no credentials retained.",
+  "unverified": [
+    "Other clients",
+    "Other protocol revisions in this client",
+    "Public Quick client E2E",
+    "External browser OAuth",
+    "Resources/prompts client UI",
+    "Provider reconnection"
+  ]
+}

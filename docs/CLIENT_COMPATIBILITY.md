@@ -1,6 +1,6 @@
-# Client compatibility — 2026-10-08
+# Client compatibility — 2026-10-22
 
-mcptunnel bridges current stateless HTTP requests to real legacy stdio servers. This has passed automated gateway tests. **No listed AI client was tested end to end.** No listed client account, API credential or external authorization server was configured. Separate real Filesystem/Quick HTTPS verification is recorded below.
+mcptunnel bridges current stateless HTTP requests to real legacy stdio servers. This has passed automated gateway tests. **Codex CLI 0.146.0 passed one real local Basic-authenticated connection** using an existing ChatGPT login: legacy `2025-06-18` initialization, tool discovery, Filesystem `read_text_file` and session deletion. [Redacted evidence](CODEX_E2E_RESULTS.json) records actual wire methods and the successful MCP tool event. An observation-only loopback proxy captured protocol metadata; this is not independent HTTPS hosting or public Quick client proof. Other named clients and external browser OAuth remain unverified.
 
 ## Evidence levels and every combination
 
@@ -10,7 +10,7 @@ Each row has three independent statuses:
 
 1. **Official documented capability:** exact revision/transport/auth/operation combination. Generic HTTP documentation does not prove a specific revision, so these exact combinations remain NOT TESTED unless explicitly unsupported. The table below records generic documented capabilities separately.
 2. **Automated protocol test:** an executed gateway/stdio fixture, independent of the named AI client. Repeated PASS rows across clients represent the same gateway evidence, not eight client runs.
-3. **Actual client E2E:** NOT TESTED for available combinations. Paid managed mode is UNSUPPORTED because there is no backend; token validation in public mode is UNSUPPORTED because it has no tokens.
+3. **Actual client E2E:** PASS only for the three recorded Codex/local/Basic/2025-06-18 discovery and tool-operation rows; NOT TESTED for other available combinations. Paid managed mode is UNSUPPORTED because there is no backend; token validation in public mode is UNSUPPORTED because it has no tokens.
 
 PASS means the specified check passed. FAIL means an executed check failed. UNSUPPORTED means an unavailable or inapplicable feature. NOT TESTED means no evidence establishes that exact combination. Missing positive coverage is not treated as PASS. Full conformance failures are recorded separately in [CONFORMANCE_RESULTS.json](CONFORMANCE_RESULTS.json).
 
@@ -42,7 +42,7 @@ Plan, organization and client version restrictions can change. Record the exact 
 
 ## Copy/paste connection configurations
 
-First create a mount using [README quick start](../README.md). Use the printed localhost URL for local clients, or run with `--public` for a remote service. Replace `https://RANDOM.trycloudflare.com/filesystem` with the full URL printed by creation. Use the **header value**, such as `Basic BASE64_CREDENTIALS`, without the `Authorization:` label. These templates follow documented client interfaces but have not been executed against accounts.
+First create a mount using [README quick start](../README.md). Use the printed localhost URL for local clients, or run with `--public` for a remote service. Replace `https://RANDOM.trycloudflare.com/filesystem` with the full URL printed by creation. Use the **header value**, such as `Basic BASE64_CREDENTIALS`, without the `Authorization:` label. The Codex header template was executed with per-process configuration and localhost. Other templates and public-URL client connections remain unverified.
 
 ### Codex
 
@@ -183,6 +183,6 @@ Run regression tests and the pinned official fixture using the commands in the [
 | Client URL update after live reconnect, independent HTTPS proxy | NOT TESTED | URL parser/restart behavior tested with a fake provider process only |
 | Linux/macOS/Windows platform CI | PASS | [Executed CI run](https://github.com/mcptunnel/mcptunnel/actions/runs/37839162800); separate five-target binary installer checks are recorded in release evidence |
 
-Before claiming a real client PASS, record client build, account eligibility, revision, URL transport, auth mode and results for all ten operations. Use dedicated test credentials, retain redacted evidence, and explicitly record unsupported resource/prompt UI behavior. Changing a client's version requires re-verification.
+Record client build, account eligibility, revision, transport, authentication and each operation actually executed. A partial successful run marks only its observed operations PASS; it does not require an exhaustive matrix to establish that core flow. Use isolated generated mount credentials and retain redacted evidence. Resource/prompt UI, other clients and other versions need their own evidence before being claimed.
 
 Version 0.3.0 passed [three-platform CI](https://github.com/mcptunnel/mcptunnel/actions/runs/37859545144), including 66 Rust tests per platform, the new port/path/public-isolation routing smoke and 50 supported conformance scenarios. Its five native candidates passed actual `npx` Filesystem MCP checks; default localhost:8000 auto-start and real Cloudflare Quick HTTPS passed on Windows. [Exact results](LOCAL_ROUTING_RESULTS.json) do not imply account-backed AI-client or external browser OAuth E2E.

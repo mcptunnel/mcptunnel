@@ -1,4 +1,6 @@
-# Modernization engineering report — 2026-10-08
+# Engineering report
+
+Current pre-public status and evidence: [2026-10-22 readiness report](PUBLIC_READINESS.md). Earlier sections below retain dated modernization evidence.
 
 ## Pre-public documentation check — 2026-10-22
 
@@ -27,7 +29,7 @@ The same implementation commit also passed the [complete 0.2.3 Linux/macOS/Windo
 
 The same packaged binary and documented npx launcher also passed these checks over an actual public Cloudflare Quick HTTPS URL. The first immediate connection preceded DNS propagation and failed; a bounded readiness check then observed a real health response, followed by successful authenticated discovery/read/list, policy denial and unauthenticated rejection. Test mounts, daemons and tunnel processes were stopped afterward.
 
-**Achieved locally:** a current stateless HTTP client invokes a legacy stdio tool; legacy initialization sessions continue working; supported synchronous gateway conformance scenarios pass; authentication/session/process isolation is tested; Quick configuration permits only temporary origins; unimplemented managed provisioning fails closed. **Full conformance and actual AI-client E2E have not been achieved.** The exact remaining evidence is below.
+**Achieved locally:** a current stateless HTTP client invokes a legacy stdio tool; legacy initialization sessions continue working; supported synchronous gateway conformance scenarios pass; authentication/session/process isolation is tested; Quick configuration permits only temporary origins; unimplemented managed provisioning fails closed. **Full conformance was not achieved.** Named-client E2E was absent in this historical run; the current Codex result is recorded in [the readiness report](PUBLIC_READINESS.md). The exact remaining evidence is below.
 
 ## Changes by file
 
@@ -76,7 +78,7 @@ HTTP bodies: 1 MiB/10 seconds. Stdio: 4 MiB per line, 15-second startup, 60-seco
 
 Quick emits bounded JSON and suppresses progress because the provider has no SSE. Independent local hosting supports request-scoped progress SSE. GET subscriptions, replay, deprecated HTTP+SSE, interactive MRTR, Tasks, sampling/elicitation, logging and Apps are unsupported and unadvertised. As of 0.3.5, authenticated legacy `notifications/cancelled` requests are correlated by mount, session and typed request ID; a real HTTP/stdio regression verifies cancellation and isolation. Stream disconnect and timeout cancellation are also verified.
 
-## Actual verification
+## Historical 0.2.2 verification
 
 | Command/check | Result |
 |---|---|
@@ -132,23 +134,22 @@ The runner waits for probe/readiness, uses port 43123, writes timestamped raw re
 
 ## Client evidence and infrastructure blockers
 
-[Client compatibility](CLIENT_COMPATIBILITY.md) distinguishes official configuration documentation from protocol fixtures and account-backed E2E. All actual AI-client tests remain NOT TESTED. Basic public/current and external JWT/legacy HTTP combinations have focused tests; a transport-supported client is not assumed to negotiate 2026-07-28. No client configuration was altered. No secrets appear in durable evidence.
+[Client compatibility](CLIENT_COMPATIBILITY.md) distinguishes official configuration documentation from protocol fixtures and account-backed E2E. The original 2026-10-08 run had no actual AI-client E2E. A focused Codex CLI 0.146.0 run subsequently passed on 2026-10-22; other combinations remain unverified. Basic public/current and external JWT/legacy HTTP combinations have focused tests; a transport-supported client is not assumed to negotiate 2026-07-28. No client configuration was altered. No secrets appear in durable evidence.
 
-Live public Quick connectivity passed the actual Filesystem MCP checks described above; live reconnect/client URL replacement remains untested. A public reverse proxy, external AS TLS discovery/key rotation/browser PKCE/CIMD/DCR/refresh, client accounts and OpenAI API billing remain unavailable. Linux/macOS/Windows CI passed after the authorized push. Windows cross-user named-pipe ACL behavior remains untested.
+Live public Quick connectivity passed the actual Filesystem MCP checks described above; live reconnect/client URL replacement remains untested. An independent HTTPS reverse proxy, external AS TLS discovery/key rotation/browser PKCE/CIMD/DCR/refresh and OpenAI API billing were not exercised. Linux/macOS/Windows CI passed after the authorized push. Windows cross-user named-pipe ACL behavior remains untested.
 
 Managed hosting requires a trusted service that authenticates accounts, verifies paid entitlement, records hostname ownership, provisions routes, renews expiring leases and revokes routing. No such service exists here. `ManagedProvisioner` is a fail-closed future boundary; local config cannot enable managed provisioning. Entitlement loss and real provider revocation require hosted tests before enabling it. Independent MIT hosting remains available without an account.
 
-## Remaining priorities
+## Current classification
 
-| Priority | Remaining issue / completion requirement |
-|---|---|
-| P0 | No known unaddressed P0 finding within the implemented synchronous scope. This is not a security certification; upstream tools retain user permissions. Built-in/inherit auth and managed mode remain disabled rather than claiming safety without their required services. |
-| P1 | Full interactive conformance does not pass. Implement and test a real callback/MRTR bridge before claiming that functionality; add official HTTP-only fixture diagnostics when doing so. |
-| P1 | Run actual named-client E2E, external authorization flows/key rotation, live Quick reconnection and independent proxy tests. Basic public Quick discovery/read/list/policy checks now pass with the real Filesystem server; exact AI-client builds and revisions remain unverified. |
-| P1 | Verify Windows IPC against a different local user. Three-platform CI passed; new binary targets additionally require their native release/install smoke runs. |
-| Resolved in 0.3.5 | Legacy explicit cancellation now reaches the active upstream call within its authenticated session. JSON-response connection aborts remain unverified; no claim of all cancellation paths is made. |
-| P2 | Benchmark cold-process latency and sustained load. Process isolation bounds state but is not yet performance-qualified for a production workload. |
-| P2 | Define schema/probe refresh policy for dynamically changing upstream catalogs; current schema snapshot requires an operator probe. |
-| P2 | Evaluate optional Tasks/subscriptions/Apps only with a justified use case and conformance coverage. A real paid backend/provider lifecycle is separate work, not a hidden local feature. |
+The authoritative workboard is [td#596](https://tdtd.dev/596). Historical broad QA suggestions are not new release gates.
 
-The code and docs intentionally limit their claims to these results. Local helper processes are cleaned up; implementation work is committed with version bumps and pushed with authorization. Public binary publication requires a public download destination.
+| Category | Work | Tracking |
+|---|---|---|
+| Now — corrected | Reproducible first connection, truthful capability docs, pinned Rust toolchain, authenticated legacy cancellation, actionable public DNS/HTTP diagnostics | td#597–td#602 |
+| Now — verify | One actual Codex connection, supported JWT/hosting boundary, final local native candidate | td#603–td#605; [current results](PUBLIC_READINESS.md) |
+| Now — publication gate | Public destination/visibility decision, explicitly authorized release Actions, anonymous download/install verification | [td#606](https://tdtd.dev/606) |
+| Future | Optional modern state continuity and interactive features; catalog refresh/workload optimization; additional named-client/hosting/platform evidence | td#607–td#610 |
+| Future — revenue | Trusted managed hostname provisioning, billing/plans/operational entitlement lifecycle | td#611–td#612 |
+
+No claim is made for JSON-response abort coverage, external browser OAuth, live reconnect, every client or every platform at the current source revision. Full conformance still has unsupported-feature failures. The published scope remains synchronous stdio-to-HTTP operations with the documented limits.

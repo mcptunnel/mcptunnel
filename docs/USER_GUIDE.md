@@ -6,9 +6,11 @@ Start with the [README quick start](../README.md#quick-start). This guide covers
 
 ## Installation
 
-**Pre-release:** no GitHub release has been published. The repository currently requires access. Collaborators can install the verified 0.3.1 native candidate below; anonymous one-command installation requires the first public release.
+**Pre-release:** no GitHub release has been published. The repository currently requires access. The current 0.3.6 macOS ARM64 candidate is locally verified; see [current results](PUBLIC_READINESS.md). The historical five-platform 0.3.1 candidate below predates the latest fixes. Anonymous one-command installation requires the first public release.
 
 ### Install a native candidate
+
+These commands reproduce the historical 0.3.1 artifact. Do not present it as the corrected 0.3.6 release.
 
 1. Open the [verified candidate run](https://github.com/mcptunnel/mcptunnel/actions/runs/37863330366), then download the `release-<target>` artifact matching your platform from the table below. Artifact downloads require GitHub sign-in and repository access.
 2. Extract the artifact ZIP. Keep the `mcptunnel-v0.3.1-<target>` archive and its `.sha256` sidecar together; do not unpack the inner archive yet.

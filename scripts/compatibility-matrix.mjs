@@ -37,7 +37,8 @@ const rows = [];
 for (const client of clients) for (const revision of revisions) for (const transport of transports) for (const auth of authModes) for (const operation of operations) {
   const [status, evidence] = protocol(revision, transport, auth, operation);
   const unsupported = transport === 'Paid managed' || (auth === 'Public' && operation === 'expired_or_invalid_token');
-  rows.push([client, revision, transport, auth, operation, unsupported ? 'UNSUPPORTED' : 'NOT TESTED', status, unsupported ? 'UNSUPPORTED' : 'NOT TESTED', unsupported ? evidence : 'docs/RESEARCH.md; documented HTTP/auth capability does not specify this exact revision and complete combination', evidence, unsupported ? evidence : 'No client login/API credentials, exact client version or external provider E2E run available']);
+  const codexPass = client === 'Codex' && revision === '2025-06-18' && transport.startsWith('Independent local') && auth === 'Basic' && ['connect_discover_or_initialize', 'list_tools', 'call_tools'].includes(operation);
+  rows.push([client, revision, transport, auth, operation, unsupported ? 'UNSUPPORTED' : 'NOT TESTED', status, unsupported ? 'UNSUPPORTED' : codexPass ? 'PASS' : 'NOT TESTED', unsupported ? evidence : 'docs/RESEARCH.md; documented HTTP/auth capability does not specify this exact revision and complete combination', evidence, unsupported ? evidence : codexPass ? 'docs/CODEX_E2E_RESULTS.json: Codex CLI 0.146.0; local HTTP with Basic through observation-only loopback proxy; Filesystem read_text_file (not external HTTPS proxy)' : 'This exact client/revision/transport/auth/operation combination has no recorded client E2E evidence']);
 }
 assert.equal(rows.length, 2880);
 assert.equal(new Set(rows.map(row => row.slice(0, 5).join('\0'))).size, rows.length);

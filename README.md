@@ -23,7 +23,7 @@ Run an existing MCP server on **localhost**, or add **`--public`** for a tempora
 
 ## Install
 
-**Pre-release:** no public release is available yet. Repository collaborators can [download the verified 0.3.1 native candidate](https://github.com/mcptunnel/mcptunnel/actions/runs/37863330366) and [install it with automatic PATH setup](docs/USER_GUIDE.md#install-a-native-candidate).
+**Pre-release:** no public release is available yet. Version **0.3.6** has a locally verified macOS ARM64 candidate. See [current verification and remaining publication gates](docs/PUBLIC_READINESS.md) and the [release procedure](docs/RELEASING.md). Earlier five-platform 0.3.1 artifacts do not contain the latest fixes.
 
 <details>
 <summary>One-command installers — available after the first public release</summary>
@@ -77,7 +77,7 @@ The package version is deliberately pinned to the recorded verified example. npm
 
 Choose **Streamable HTTP**, paste the complete MCP URL, and set the `Authorization` header to the printed `Basic …` value. Save it privately; credentials are shown only at creation.
 
-Local clients can use localhost. Remote services need the public HTTPS URL. See [client configurations](docs/CLIENT_COMPATIBILITY.md#copypaste-connection-configurations) for Codex, Claude Code, Cursor and other clients, including external OAuth. Account-backed client connections remain unverified.
+Local clients can use localhost. Remote services need the public HTTPS URL. See [client configurations](docs/CLIENT_COMPATIBILITY.md#copypaste-connection-configurations) for Codex, Claude Code, Cursor and other clients, including external OAuth. Codex CLI 0.146.0 has passed local Basic-authenticated discovery and a file read; other client/account flows remain unverified.
 
 ## Choose your endpoint
 

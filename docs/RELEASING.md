@@ -52,6 +52,16 @@ Offline assets must include the matching archive and SHA256SUMS. Both installers
 
 Cloudflared is pinned to 2026.10.0 with per-platform digests from its official GitHub release. An existing executable is preserved. Update this pin and verify all digests together when changing it.
 
+## Current publication gate
+
+See [the current readiness report](PUBLIC_READINESS.md) and [td#606](https://tdtd.dev/606). Version 0.3.6 is a local macOS ARM64 candidate; the previous five-platform evidence below applies to 0.3.1, not the new gateway changes. Before publishing:
+
+1. The owner chooses/authorizes the public download destination and any repository visibility change.
+2. Obtain explicit authorization for one release execution: full supported CI on Linux/macOS/Windows plus the five native archive/install jobs. Current Actions remain disabled.
+3. Publish only the fully verified tagged revision/assets; verify an anonymous install from the public URL. Local archive installation does not satisfy this last step.
+
+Preparation does not itself authorize any of these external actions.
+
 ## Evidence
 
 Version **0.3.1** passed [Linux/macOS/Windows CI](https://github.com/mcptunnel/mcptunnel/actions/runs/37863297281): 66 tests per platform, fmt, strict Clippy, release builds, routing smoke and 50 supported conformance scenarios. Its [native candidate run](https://github.com/mcptunnel/mcptunnel/actions/runs/37863330366) passed all five target jobs and the actual official Filesystem MCP. Both macOS architectures verified zsh/bash startup, including custom ZDOTDIR; both Linux architectures verified bash/fish startup, including XDG_CONFIG_HOME. Real archive tests covered preserved profile content/PATH, repeated installation/activation, relocation, opt-out, read-only profiles, special characters and corruption before writes. All five downloaded archive digests match their sidecars. [Exact source commit, checksums and checks](INSTALLER_PATH_RESULTS.json) are retained. This is a verified candidate; no tag or release was published.
