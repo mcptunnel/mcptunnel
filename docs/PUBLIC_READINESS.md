@@ -1,6 +1,6 @@
 # Public readiness — 2026-10-22
 
-This document records the 0.3.6 preparation audit. The subsequent authorized public release is [v0.3.7](releases/v0.3.7.md); its deployment result is tracked in [td#606](https://tdtd.dev/606). Statements below about no push/publication describe the preparation phase.
+This document records the 0.3.6 preparation audit. The subsequent authorized [v0.3.7 public release](https://github.com/mcptunnel/mcptunnel/releases/tag/v0.3.7) completed: all ten release jobs passed and anonymous public-URL installation plus installed-binary MCP checks succeeded. [Exact deployment evidence](PUBLIC_RELEASE_RESULTS.json) and [td#606](https://tdtd.dev/606) record completion. Statements below about no push/publication or a not-started release describe the preparation phase.
 
 **Development preparation is complete for the documented synchronous scope. The audit established no remaining product defect from the two follow-ups below: one is environment-specific DNS behavior, the other is a release-stage operation.** The current local candidate is **0.3.6**, macOS ARM64. No release, tag, push, visibility change or GitHub Actions execution was performed in this work session.
 

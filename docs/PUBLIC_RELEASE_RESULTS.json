@@ -1,0 +1,161 @@
+{
+  "recordedAt": "2026-10-22T18:56:27.653743+00:00",
+  "version": "0.3.7",
+  "sourceCommit": "750c0a9ec7be5ec31a7dfc66e557cc32f727d4f1",
+  "repository": {
+    "url": "https://github.com/mcptunnel/mcptunnel",
+    "visibility": "public",
+    "anonymousHTTP": 200
+  },
+  "workflow": {
+    "url": "https://github.com/mcptunnel/mcptunnel/actions/runs/39834008220",
+    "runId": 39834008220,
+    "attempt": 1,
+    "event": "push",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "binaries (windows-2022, x86_64-pc-windows-msvc)",
+        "id": 120017392834,
+        "conclusion": "success"
+      },
+      {
+        "name": "binaries (macos-15-intel, x86_64-apple-darwin)",
+        "id": 120017392956,
+        "conclusion": "success"
+      },
+      {
+        "name": "binaries (ubuntu-22.04, x86_64-unknown-linux-gnu)",
+        "id": 120017392972,
+        "conclusion": "success"
+      },
+      {
+        "name": "binaries (ubuntu-24.04-arm, aarch64-unknown-linux-gnu)",
+        "id": 120017393094,
+        "conclusion": "success"
+      },
+      {
+        "name": "verify / applicable-conformance",
+        "id": 120017393105,
+        "conclusion": "success"
+      },
+      {
+        "name": "binaries (macos-14, aarch64-apple-darwin)",
+        "id": 120017393108,
+        "conclusion": "success"
+      },
+      {
+        "name": "verify / rust (ubuntu-latest)",
+        "id": 120017393437,
+        "conclusion": "success"
+      },
+      {
+        "name": "verify / rust (macos-latest)",
+        "id": 120017393498,
+        "conclusion": "success"
+      },
+      {
+        "name": "verify / rust (windows-latest)",
+        "id": 120017393656,
+        "conclusion": "success"
+      },
+      {
+        "name": "publish",
+        "id": 120022446775,
+        "conclusion": "success"
+      }
+    ]
+  },
+  "verification": {
+    "rustTestsPerOS": {
+      "Linux": 70,
+      "macOS": 70,
+      "Windows": 70
+    },
+    "strictClippyAndFmt": "PASS on all three OSes",
+    "supportedConformance": {
+      "currentScenarios": 26,
+      "legacyScenarios": 24,
+      "totalScenarios": 50,
+      "result": "PASS; selected supported subset, not full protocol conformance"
+    },
+    "nativeTargets": "All five archive, installer, PATH where supported, tamper and real Filesystem jobs passed"
+  },
+  "publicInstallation": {
+    "verifiedAt": "2026-10-22T18:55:37.282Z",
+    "repository": "https://github.com/mcptunnel/mcptunnel",
+    "release": "https://github.com/mcptunnel/mcptunnel/releases/tag/v0.3.7",
+    "tag": "v0.3.7",
+    "installerURL": "https://github.com/mcptunnel/mcptunnel/releases/latest/download/install.sh",
+    "anonymousHTTP": 200,
+    "installerHTTP": 200,
+    "version": "mcptunnel 0.3.7",
+    "platform": "darwin",
+    "arch": "arm64",
+    "installerSHA256": "778e83ed504a03eff08dcc997b0b0a18cd4aa1b252b912ac6f68de14817d63d3",
+    "publishedAssets": [
+      {
+        "name": "install.ps1",
+        "size": 4799,
+        "digest": "sha256:ee0effd550635689f762dbc18502823ad4e5c87b519d15cf2d03e63153998a86",
+        "url": "https://github.com/mcptunnel/mcptunnel/releases/download/v0.3.7/install.ps1"
+      },
+      {
+        "name": "install.sh",
+        "size": 7552,
+        "digest": "sha256:778e83ed504a03eff08dcc997b0b0a18cd4aa1b252b912ac6f68de14817d63d3",
+        "url": "https://github.com/mcptunnel/mcptunnel/releases/download/v0.3.7/install.sh"
+      },
+      {
+        "name": "mcptunnel-v0.3.7-aarch64-apple-darwin.tar.gz",
+        "size": 7102935,
+        "digest": "sha256:3b37a0e9665da74f556fcb02f618e7ab4fabece74a629803ba4cf3ee199e02da",
+        "url": "https://github.com/mcptunnel/mcptunnel/releases/download/v0.3.7/mcptunnel-v0.3.7-aarch64-apple-darwin.tar.gz"
+      },
+      {
+        "name": "mcptunnel-v0.3.7-aarch64-unknown-linux-gnu.tar.gz",
+        "size": 7630249,
+        "digest": "sha256:5f8fcad0b741049915a8ce930f2421042ad5097a594c54f32ad54114f5621951",
+        "url": "https://github.com/mcptunnel/mcptunnel/releases/download/v0.3.7/mcptunnel-v0.3.7-aarch64-unknown-linux-gnu.tar.gz"
+      },
+      {
+        "name": "mcptunnel-v0.3.7-x86_64-apple-darwin.tar.gz",
+        "size": 7419044,
+        "digest": "sha256:ad8bc1bea9fd99f6ecb84e64725d05637bce60d9ecfc5eeaad57a62ee8ede508",
+        "url": "https://github.com/mcptunnel/mcptunnel/releases/download/v0.3.7/mcptunnel-v0.3.7-x86_64-apple-darwin.tar.gz"
+      },
+      {
+        "name": "mcptunnel-v0.3.7-x86_64-pc-windows-msvc.zip",
+        "size": 6707093,
+        "digest": "sha256:ad5b1ba4ec63abc3bd2dddc493c8364752e85aa7ef00ac3371f6af84fbd4f15d",
+        "url": "https://github.com/mcptunnel/mcptunnel/releases/download/v0.3.7/mcptunnel-v0.3.7-x86_64-pc-windows-msvc.zip"
+      },
+      {
+        "name": "mcptunnel-v0.3.7-x86_64-unknown-linux-gnu.tar.gz",
+        "size": 7761899,
+        "digest": "sha256:3d9a9a83cd62d4b227644941547a9ad216f31fc03a34c07790b4d4a66918cc15",
+        "url": "https://github.com/mcptunnel/mcptunnel/releases/download/v0.3.7/mcptunnel-v0.3.7-x86_64-unknown-linux-gnu.tar.gz"
+      },
+      {
+        "name": "SHA256SUMS",
+        "size": 562,
+        "digest": "sha256:1d2dd7e57ca7824163f2a82abe4e907258ed8d22d16ba13cae36780926a85ddf",
+        "url": "https://github.com/mcptunnel/mcptunnel/releases/download/v0.3.7/SHA256SUMS"
+      }
+    ],
+    "checks": [
+      "anonymous latest release metadata and installer download",
+      "installer fetched release archives/checksums with no offline assets or version override",
+      "isolated public URL installation",
+      "fresh zsh PATH activation",
+      "installed binary reports 0.3.7",
+      "real pinned Filesystem MCP: Basic auth, modern discovery/read/list, write denial and unauthenticated rejection"
+    ],
+    "existingCloudflared": "preserved from existing PATH",
+    "cleanup": "isolated install/home and smoke daemon/upstream/state removed in finally"
+  },
+  "workflowStateAfterRelease": {
+    "ci.yml": "disabled_manually",
+    "release.yml": "disabled_manually"
+  }
+}

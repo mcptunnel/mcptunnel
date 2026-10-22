@@ -54,15 +54,11 @@ Cloudflared is pinned to 2026.10.0 with per-platform digests from its official G
 
 ## Current publication gate
 
-This section describes release execution, not missing development work. Public-URL installation is checked after publishing assets; the local archive installer already passed. The separate DNS observation on the audit Mac does not establish a product defect or a prerequisite for publication.
+**Completed on 2026-10-22:** [v0.3.7 is public](https://github.com/mcptunnel/mcptunnel/releases/tag/v0.3.7). The repository is public, all commits for the release are pushed, and [release run 39834008220](https://github.com/mcptunnel/mcptunnel/actions/runs/39834008220) passed all ten jobs: three OS verification jobs, the supported conformance subset, five native candidates and publication.
 
-See [the current readiness report](PUBLIC_READINESS.md) and [td#606](https://tdtd.dev/606). Version 0.3.6 is a local macOS ARM64 candidate; the previous five-platform evidence below applies to 0.3.1, not the new gateway changes. Before publishing:
+Each OS passed 70 Rust tests, strict Clippy, fmt and routing. All five archives passed their actual installer and real Filesystem checks. An anonymous macOS ARM64 installation from `releases/latest/download/install.sh` then downloaded the public archive/checksums, installed 0.3.7, configured a fresh zsh PATH and passed the real Filesystem Basic/read/list/write-denial flow using the installed binary. Test installation, configuration and processes were cleaned up. [Exact release, assets and verification evidence](PUBLIC_RELEASE_RESULTS.json).
 
-1. The owner chooses/authorizes the public download destination and any repository visibility change.
-2. Obtain explicit authorization for one release execution: full supported CI on Linux/macOS/Windows plus the five native archive/install jobs. Current Actions remain disabled.
-3. Publish only the fully verified tagged revision/assets; verify an anonymous install from the public URL. Local archive installation does not satisfy this last step.
-
-Preparation does not itself authorize any of these external actions.
+This was one explicitly authorized release execution. Both workflows were restored to their previous disabled state afterward; future Actions execution still requires authorization under AGENTS.md. The earlier audit Mac's Quick DNS observation is unrelated to the successful public GitHub download/install check.
 
 ## Evidence
 
