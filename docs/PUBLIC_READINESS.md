@@ -1,5 +1,7 @@
 # Public readiness — 2026-10-22
 
+This document records the 0.3.6 preparation audit. The subsequent authorized public release is [v0.3.7](releases/v0.3.7.md); its deployment result is tracked in [td#606](https://tdtd.dev/606). Statements below about no push/publication describe the preparation phase.
+
 **Development preparation is complete for the documented synchronous scope. The audit established no remaining product defect from the two follow-ups below: one is environment-specific DNS behavior, the other is a release-stage operation.** The current local candidate is **0.3.6**, macOS ARM64. No release, tag, push, visibility change or GitHub Actions execution was performed in this work session.
 
 The authoritative task document is [td#596](https://tdtd.dev/596). It was written before three Astra agents worked on separate documentation, cancellation and diagnostics files. Each problem has its own task; future features are not silently treated as launch defects.

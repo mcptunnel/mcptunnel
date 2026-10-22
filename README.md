@@ -23,10 +23,7 @@ Run an existing MCP server on **localhost**, or add **`--public`** for a tempora
 
 ## Install
 
-**Pre-release:** no public release is available yet. Version **0.3.6** has a locally verified macOS ARM64 candidate. See [current verification and remaining publication gates](docs/PUBLIC_READINESS.md) and the [release procedure](docs/RELEASING.md). Earlier five-platform 0.3.1 artifacts do not contain the latest fixes.
-
-<details>
-<summary>One-command installers — available after the first public release</summary>
+Download a native binary from [GitHub Releases](https://github.com/mcptunnel/mcptunnel/releases/latest), or use the installer below. **No Rust or Cargo required.**
 
 **macOS / Linux**
 
@@ -46,7 +43,6 @@ The installer verifies downloads, installs `cloudflared` if missing and configur
 mcptunnel --version
 ```
 
-</details>
 
 See [supported platforms and requirements](docs/USER_GUIDE.md#platform-requirements). Each MCP server also needs its own runtime.
 

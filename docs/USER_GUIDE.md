@@ -6,37 +6,7 @@ Start with the [README quick start](../README.md#quick-start). This guide covers
 
 ## Installation
 
-**Pre-release:** no GitHub release has been published. The repository currently requires access. The current 0.3.6 macOS ARM64 candidate is locally verified; see [current results](PUBLIC_READINESS.md). The historical five-platform 0.3.1 candidate below predates the latest fixes. Anonymous one-command installation requires the first public release.
-
-### Install a native candidate
-
-These commands reproduce the historical 0.3.1 artifact. Do not present it as the corrected 0.3.6 release.
-
-1. Open the [verified candidate run](https://github.com/mcptunnel/mcptunnel/actions/runs/37863330366), then download the `release-<target>` artifact matching your platform from the table below. Artifact downloads require GitHub sign-in and repository access.
-2. Extract the artifact ZIP. Keep the `mcptunnel-v0.3.1-<target>` archive and its `.sha256` sidecar together; do not unpack the inner archive yet.
-3. Save the matching installer, [install.ps1](../install.ps1) or [install.sh](../install.sh), in that directory. Run the commands below from that directory. The installer checks the archive before installing and sets up PATH automatically.
-
-**Windows — PowerShell**
-
-```powershell
-Copy-Item mcptunnel-v0.3.1-x86_64-pc-windows-msvc.zip.sha256 SHA256SUMS
-& ./install.ps1 -Version v0.3.1 -AssetsDirectory .
-mcptunnel --version
-```
-
-**macOS / Linux**
-
-```sh
-# Run in the extracted artifact directory, containing exactly one archive/sidecar.
-cp mcptunnel-v0.3.1-*.sha256 SHA256SUMS
-MCPTUNNEL_VERSION=v0.3.1 MCPTUNNEL_ASSET_DIR="$PWD" sh ./install.sh
-```
-
-Open a new terminal, then run `mcptunnel --version`, or use the activation command printed by the installer. The offline archive option still downloads `cloudflared` when missing; use `-SkipCloudflared` or `MCPTUNNEL_SKIP_CLOUDFLARED=1` for a fully offline local-only installation. A Windows execution policy that blocks local scripts must be handled according to your machine's policy.
-
-### Public release installers
-
-The commands below become available after the first public release. Download a ready-to-run binary. **No Rust, Cargo, or repository clone required.** The installer also installs Cloudflare's official `cloudflared` binary if it is missing. Both downloads are checked against SHA-256 digests before installation.
+Download a ready-to-run binary from [GitHub Releases](https://github.com/mcptunnel/mcptunnel/releases/latest). **No Rust, Cargo, or repository clone required.** The installer also installs Cloudflare's official `cloudflared` binary if missing. Downloads are checked against SHA-256 digests before installation.
 
 **Windows — PowerShell**
 
@@ -55,7 +25,7 @@ Open a new terminal, then run `mcptunnel --version`. To keep using the current t
 
 Windows installs into `%LOCALAPPDATA%\mcptunnel\bin` and adds it to your user PATH. macOS/Linux installs into `~/.local/bin` and automatically registers it in your zsh, bash or fish startup files. Existing PATH entries and shell settings are preserved; reinstalling does not duplicate them. Neither installer needs administrator access.
 
-After publication, you can also [download the archive for your OS and CPU](https://github.com/mcptunnel/mcptunnel/releases/latest), check `SHA256SUMS`, extract it, and put the executable on PATH manually.
+You can also [download the archive for your OS and CPU](https://github.com/mcptunnel/mcptunnel/releases/latest), check `SHA256SUMS`, extract it, and put the executable on PATH manually.
 
 ### Platform requirements
 
