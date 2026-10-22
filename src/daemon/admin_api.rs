@@ -445,6 +445,52 @@ async fn handle_doctor_run(state: &Arc<AppState>, slug: Option<&str>) -> AdminRe
         "detail": if tunnel_origins.is_empty() { "Localhost is the default; --public opens a temporary Cloudflare URL" } else { "Provider announced an origin; public/client connectivity still requires a real connection test" },
     }));
 
+    // Network evidence is separate from the provider's URL announcement.
+    // Snapshot origins before I/O; transient public failures never alter mounts.
+    let ports: std::collections::BTreeSet<u16> = match slug {
+        Some(slug) => state
+            .mount_registry
+            .get(slug)
+            .ok()
+            .flatten()
+            .map(|m| m.port)
+            .into_iter()
+            .collect(),
+        None => std::iter::once(state.default_port())
+            .chain(tunnel_origins.keys().copied())
+            .collect(),
+    };
+    let mut probes = Vec::new();
+    for port in ports {
+        if let Ok(mut bind) = state.config.daemon.bind.parse::<std::net::SocketAddr>() {
+            bind.set_port(port);
+            probes.push((format!("http://{bind}"), false));
+        }
+        if let Some(origin) = tunnel_origins.get(&port) {
+            checks.push(serde_json::json!({"check":"provider_announced","status":"PASS","detail":format!("port {port}: provider announced {origin}; this is not public readiness or independent process-liveness evidence")}));
+            probes.push((origin.clone(), true));
+        } else if slug
+            .and_then(|s| state.mount_registry.get(s).ok().flatten())
+            .is_some_and(|m| m.tunnel_mode == crate::config::TunnelMode::Quick)
+        {
+            checks.push(serde_json::json!({"check":"provider_announced","status":"WARN","detail":format!("port {port}: no provider URL available; inspect daemon/provider logs and retry")}));
+        }
+    }
+    for results in futures::future::join_all(
+        probes
+            .iter()
+            .map(|(origin, public)| crate::doctor::endpoint_checks(origin, *public)),
+    )
+    .await
+    {
+        checks.extend(
+            crate::doctor::format_checks_json(&results)["checks"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default(),
+        );
+    }
+
     // Mount-specific checks
     if let Some(slug) = slug {
         if let Ok(Some(mount)) = state.mount_registry.get(slug) {

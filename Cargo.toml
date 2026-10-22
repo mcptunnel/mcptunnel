@@ -1,6 +1,6 @@
 [package]
 name = "mcptunnel"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 description = "A local MCP gateway that bridges stdio MCP servers to localhost or temporary public HTTPS via Cloudflare Tunnel"
 license = "MIT"

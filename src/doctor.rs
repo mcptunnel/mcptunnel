@@ -187,6 +187,81 @@ pub fn mount_checks(mount: &crate::mount::types::MountRecord) -> Vec<DoctorCheck
     checks
 }
 
+/// Probe only unauthenticated health, using the machine's normal DNS. This is
+/// diagnostic evidence, never a reason to remove a mount or restart a provider.
+pub async fn endpoint_checks(origin: &str, public: bool) -> Vec<DoctorCheck> {
+    use std::time::Duration;
+    let prefix = if public { "public" } else { "local" };
+    let failure = if public {
+        DoctorStatus::Warn
+    } else {
+        DoctorStatus::Fail
+    };
+    let check = |suffix: &str, status, detail| DoctorCheck {
+        name: format!("{prefix}_{suffix}"),
+        status,
+        detail,
+    };
+    let Ok(mut url) = reqwest::Url::parse(origin) else {
+        return vec![check("http", failure, "Invalid endpoint origin".into())];
+    };
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.host_str().is_none()
+    {
+        return vec![check(
+            "http",
+            failure,
+            "Endpoint must be HTTP(S) without credentials".into(),
+        )];
+    }
+    url.set_path("/healthz");
+    url.set_query(None);
+    url.set_fragment(None);
+    let host = url.host_str().unwrap().trim_matches(['[', ']']);
+    let port = url.port_or_known_default().unwrap();
+    let dns = tokio::time::timeout(
+        Duration::from_secs(3),
+        tokio::net::lookup_host((host, port)),
+    )
+    .await;
+    let resolved = match dns {
+        Ok(Ok(mut addresses)) => addresses.next().is_some(),
+        _ => false,
+    };
+    if !resolved {
+        return vec![check("dns", failure, dns_failure_detail(host))];
+    }
+    let mut checks = vec![check(
+        "dns",
+        DoctorStatus::Pass,
+        format!("{host}: system DNS resolved"),
+    )];
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(3))
+        .timeout(Duration::from_secs(5))
+        .build();
+    let result = match client {
+        Ok(client) => client.get(url.clone()).send().await.map(|r| r.status()),
+        Err(error) => Err(error),
+    };
+    let (status, detail) = match result {
+        Ok(status) if status == reqwest::StatusCode::OK => (DoctorStatus::Pass,
+            format!("{url}: HTTP 200 reachable from this machine; MCP authentication and client connectivity are separate checks")),
+        Ok(status) => (failure, format!("{url}: HTTP {status}; expected 200. Check provider routing and local health; redirects are not followed. For a newly announced Quick URL, allow propagation and rerun doctor.")),
+        Err(error) => (failure, format!("{url}: {} after DNS resolved. Check local health, provider logs, outbound HTTPS/firewall and TLS; rerun doctor after propagation. The mount is unchanged.", if error.is_timeout() { "request timed out (5s HTTP budget)" } else if error.is_connect() { "connection/TLS failed" } else { "HTTP request failed" })),
+    };
+    checks.push(check("http", status, detail));
+    checks
+}
+
+fn dns_failure_detail(host: &str) -> String {
+    format!("{host}: system DNS lookup failed, returned no addresses, or exceeded 3s (ENOTFOUND/name resolution). A provider-announced URL does not establish DNS readiness. Retry doctor after propagation; inspect your resolver with nslookup {host} and compare nslookup {host} 1.1.1.1. No DNS bypass or system DNS change was applied; the mount is unchanged.")
+}
+
 /// Format doctor checks for human output.
 pub fn format_checks_human(checks: &[DoctorCheck]) -> String {
     checks
@@ -209,4 +284,50 @@ pub fn format_checks_json(checks: &[DoctorCheck]) -> serde_json::Value {
         })
         .collect();
     json!({ "checks": items })
+}
+
+#[cfg(test)]
+mod endpoint_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn health_probe_is_credential_free_and_does_not_follow_redirects() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for (code, expected) in [(200, "PASS"), (302, "WARN"), (503, "WARN")] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut data = [0; 4096];
+                let count = socket.read(&mut data).await.unwrap();
+                let request = String::from_utf8_lossy(&data[..count]).to_lowercase();
+                assert!(request.starts_with("get /healthz http/1.1"));
+                assert!(!request.contains("authorization:"));
+                assert!(!request.contains("secret"));
+                socket.write_all(format!("HTTP/1.1 {code} Test\r\nLocation: http://127.0.0.1:1/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+            });
+            let checks = endpoint_checks(&format!("http://{address}/mcp?token=secret"), true).await;
+            assert_eq!(checks[1].status.to_string(), expected);
+            server.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn connection_failure_is_distinct_from_dns_failure() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let checks = endpoint_checks(&format!("http://{address}"), true).await;
+        assert_eq!(checks[0].status.to_string(), "PASS");
+        assert_eq!(checks[1].status.to_string(), "WARN");
+        assert!(checks[1].detail.contains("connection/TLS failed"));
+        assert!(dns_failure_detail("example.invalid").contains("nslookup example.invalid 1.1.1.1"));
+    }
+
+    #[tokio::test]
+    async fn credentials_are_rejected_before_network_access() {
+        let checks = endpoint_checks("https://user:secret@example.invalid", true).await;
+        assert_eq!(checks.len(), 1);
+        assert!(!checks[0].detail.contains("secret"));
+    }
 }
