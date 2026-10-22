@@ -1,13 +1,13 @@
 [package]
 name = "mcptunnel"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "A local MCP gateway that bridges stdio MCP servers to localhost or temporary public HTTPS via Cloudflare Tunnel"
 license = "MIT"
 rust-version = "1.88"
 repository = "https://github.com/mcptunnel/mcptunnel"
 readme = "README.md"
-include = ["Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "src/**", "tests/**", "examples/**", "scripts/**", "docs/*.md", "docs/*.csv", "docs/*.json"]
+include = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "README.md", "LICENSE", "src/**", "tests/**", "examples/**", "scripts/**", "docs/*.md", "docs/*.csv", "docs/*.json"]
 
 [[bin]]
 name = "mcptunnel"
