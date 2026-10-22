@@ -20,6 +20,9 @@ pub struct AppState {
     pub(crate) registration: tokio::sync::Mutex<()>,
     pub daemon_instance_id: String,
     pub upstream_children: RwLock<HashMap<String, Arc<UpstreamChild>>>,
+    pub(crate) legacy_requests: std::sync::Mutex<
+        HashMap<(String, String, rmcp::model::RequestId), tokio_util::sync::CancellationToken>,
+    >,
     pub request_permits: Arc<tokio::sync::Semaphore>,
     pub mount_permits: RwLock<HashMap<String, Arc<tokio::sync::Semaphore>>>,
     pub mount_cancellation: RwLock<HashMap<String, tokio_util::sync::CancellationToken>>,
@@ -46,6 +49,7 @@ impl AppState {
             registration: tokio::sync::Mutex::new(()),
             daemon_instance_id: uuid::Uuid::new_v4().to_string(),
             upstream_children: RwLock::new(HashMap::new()),
+            legacy_requests: std::sync::Mutex::new(HashMap::new()),
             request_permits: Arc::new(tokio::sync::Semaphore::new(64)),
             mount_permits: RwLock::new(HashMap::new()),
             mount_cancellation: RwLock::new(HashMap::new()),

@@ -85,20 +85,6 @@ pub async fn handle_mcp(
     if request.method() != Method::POST {
         return StatusCode::METHOD_NOT_ALLOWED.into_response();
     }
-    let gate = state
-        .mount_permits
-        .write()
-        .await
-        .entry(slug.clone())
-        .or_insert_with(|| {
-            Arc::new(tokio::sync::Semaphore::new(
-                state.config.defaults.max_inflight_per_session,
-            ))
-        })
-        .clone();
-    let Ok(_mount_permit) = gate.try_acquire_owned() else {
-        return StatusCode::TOO_MANY_REQUESTS.into_response();
-    };
     let (parts, body) = request.into_parts();
     let bytes = match tokio::time::timeout(
         std::time::Duration::from_secs(10),
@@ -130,6 +116,27 @@ pub async fn handle_mcp(
         );
     }
     let method = body["method"].as_str().unwrap_or_default();
+    let cancellation_notification = method == "notifications/cancelled" && body.get("id").is_none();
+    let gate = state
+        .mount_permits
+        .write()
+        .await
+        .entry(slug.clone())
+        .or_insert_with(|| {
+            Arc::new(tokio::sync::Semaphore::new(
+                state.config.defaults.max_inflight_per_session,
+            ))
+        })
+        .clone();
+    // Cancellation must remain available when the call occupies the last admission slot.
+    let _mount_permit = if cancellation_notification {
+        None
+    } else {
+        match gate.try_acquire_owned() {
+            Ok(permit) => Some(permit),
+            Err(_) => return StatusCode::TOO_MANY_REQUESTS.into_response(),
+        }
+    };
     if method == "tools/call" {
         if let Some(required) = mount.oauth_config.as_ref().and_then(|c| {
             body["params"]["name"]
@@ -193,7 +200,7 @@ pub async fn handle_mcp(
                 "protocol version differs from legacy session",
             );
         }
-        if let Some(gate) = session.permits {
+        if let Some(gate) = session.permits.filter(|_| !cancellation_notification) {
             _session_permit = match gate.try_acquire_owned() {
                 Ok(p) => Some(p),
                 Err(_) => return StatusCode::TOO_MANY_REQUESTS.into_response(),
@@ -201,6 +208,34 @@ pub async fn handle_mcp(
         }
         state.session_manager.touch_session(sid).await;
     }
+    // Reserve IDs before dispatch so an immediately following cancellation cannot race
+    // handler startup. Ownership was checked above; duplicate active IDs never replace tokens.
+    let reservation = if !modern && !initialize && body.get("id").is_some() {
+        let request_id = match serde_json::from_value::<rmcp::model::RequestId>(id.clone()) {
+            Ok(id) => id,
+            Err(_) => return rpc_error(StatusCode::BAD_REQUEST, id, -32600, "invalid request ID"),
+        };
+        let key = (slug.clone(), sid.clone().unwrap(), request_id);
+        let mut requests = state.legacy_requests.lock().unwrap();
+        if requests.contains_key(&key) {
+            return rpc_error(
+                StatusCode::BAD_REQUEST,
+                id,
+                -32600,
+                "request ID is already active",
+            );
+        }
+        let token = tokio_util::sync::CancellationToken::new();
+        requests.insert(key.clone(), token.clone());
+        Some(LegacyRequestReservation {
+            state: state.clone(),
+            key,
+            token,
+        })
+    } else {
+        None
+    };
+    let legacy_cancellation = reservation.as_ref().map(|r| r.token.clone());
     // SDK validates per-request metadata, standard/custom headers, media types, notification
     // semantics, version errors, resultType/cache hints, and request disconnect cancellation.
     let mount_ct = state
@@ -229,6 +264,7 @@ pub async fn handle_mcp(
             Ok(Bridge {
                 state: bridge_state.clone(),
                 mount: bridge_mount.clone(),
+                legacy_cancellation: legacy_cancellation.clone(),
             })
         },
         Arc::new(NeverSessionManager::default()),
@@ -240,6 +276,22 @@ pub async fn handle_mcp(
         Err(never) => match never {},
     };
     let mut response = response.map(Body::new);
+    // Do not act on malformed notifications, mismatched headers or rejected media types.
+    if !modern && cancellation_notification && response.status() == StatusCode::ACCEPTED {
+        if let Ok(params) = serde_json::from_value::<rmcp::model::CancelledNotificationParam>(
+            body["params"].clone(),
+        ) {
+            if let (Some(sid), Some(request_id)) = (&sid, params.request_id) {
+                if let Some(token) = state.legacy_requests.lock().unwrap().get(&(
+                    slug.clone(),
+                    sid.clone(),
+                    request_id,
+                )) {
+                    token.cancel();
+                }
+            }
+        }
+    }
     if initialize && !modern && response.status().is_success() {
         let response_bytes = match to_bytes(response.into_body(), BODY_LIMIT).await {
             Ok(b) => b,
@@ -304,11 +356,23 @@ pub async fn handle_mcp(
     let stream = futures::stream::unfold(
         (
             body.into_data_stream(),
-            (_global_permit, _mount_permit, _session_permit),
+            (_global_permit, _mount_permit, _session_permit, reservation),
         ),
         |(mut stream, guards)| async move { stream.next().await.map(|chunk| (chunk, (stream, guards))) },
     );
     Response::from_parts(response_parts, Body::from_stream(stream))
+}
+
+struct LegacyRequestReservation {
+    state: Arc<AppState>,
+    key: (String, String, rmcp::model::RequestId),
+    token: tokio_util::sync::CancellationToken,
+}
+impl Drop for LegacyRequestReservation {
+    fn drop(&mut self) {
+        self.state.legacy_requests.lock().unwrap().remove(&self.key);
+        self.token.cancel();
+    }
 }
 
 struct SessionReservation {

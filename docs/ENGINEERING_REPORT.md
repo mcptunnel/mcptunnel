@@ -74,7 +74,7 @@ Modern requests create one upstream process per operation; legacy sessions own r
 
 HTTP bodies: 1 MiB/10 seconds. Stdio: 4 MiB per line, 15-second startup, 60-second request. Admission: 64 global requests, default 8 per mount/session; 8 sessions per mount/256 global. Discovery: 64 pages, 4,096 entries and 16 MiB per catalog. Request-body permits survive through SSE stream completion/disconnect. Progress does not reset the hard timeout.
 
-Quick emits bounded JSON and suppresses progress because the provider has no SSE. Independent local hosting supports request-scoped progress SSE. GET subscriptions, replay, deprecated HTTP+SSE, interactive MRTR, Tasks, sampling/elicitation, logging and Apps are unsupported and unadvertised. Separate legacy `notifications/cancelled` requests are not correlated to active calls; stream disconnect and timeout cancellation are verified.
+Quick emits bounded JSON and suppresses progress because the provider has no SSE. Independent local hosting supports request-scoped progress SSE. GET subscriptions, replay, deprecated HTTP+SSE, interactive MRTR, Tasks, sampling/elicitation, logging and Apps are unsupported and unadvertised. As of 0.3.5, authenticated legacy `notifications/cancelled` requests are correlated by mount, session and typed request ID; a real HTTP/stdio regression verifies cancellation and isolation. Stream disconnect and timeout cancellation are also verified.
 
 ## Actual verification
 
@@ -146,7 +146,7 @@ Managed hosting requires a trusted service that authenticates accounts, verifies
 | P1 | Full interactive conformance does not pass. Implement and test a real callback/MRTR bridge before claiming that functionality; add official HTTP-only fixture diagnostics when doing so. |
 | P1 | Run actual named-client E2E, external authorization flows/key rotation, live Quick reconnection and independent proxy tests. Basic public Quick discovery/read/list/policy checks now pass with the real Filesystem server; exact AI-client builds and revisions remain unverified. |
 | P1 | Verify Windows IPC against a different local user. Three-platform CI passed; new binary targets additionally require their native release/install smoke runs. |
-| P1 | Legacy explicit cross-request cancellation is not mapped, and JSON-response connection aborts are not directly tested. Add authenticated session/request-ID routing and a JSON-abort regression before claiming all cancellation paths. SSE disconnect and hard timeout cancellation pass. |
+| Resolved in 0.3.5 | Legacy explicit cancellation now reaches the active upstream call within its authenticated session. JSON-response connection aborts remain unverified; no claim of all cancellation paths is made. |
 | P2 | Benchmark cold-process latency and sustained load. Process isolation bounds state but is not yet performance-qualified for a production workload. |
 | P2 | Define schema/probe refresh policy for dynamically changing upstream catalogs; current schema snapshot requires an operator probe. |
 | P2 | Evaluate optional Tasks/subscriptions/Apps only with a justified use case and conformance coverage. A real paid backend/provider lifecycle is separate work, not a hidden local feature. |

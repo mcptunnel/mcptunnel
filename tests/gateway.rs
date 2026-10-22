@@ -681,3 +681,168 @@ async fn probe_collects_all_pages_and_rejects_repeated_cursors() {
     assert!(!bad.ok);
     assert!(bad.error.unwrap().contains("repeats a cursor"));
 }
+
+#[tokio::test]
+async fn legacy_cross_request_cancellation_is_scoped_and_releases_request_id() {
+    let temp = tempfile::tempdir().unwrap();
+    let events = temp.path().join("events.txt");
+    let s = server_options(
+        PolicyConfig::default(),
+        TunnelMode::Local,
+        Some(events.to_string_lossy().into()),
+        2,
+    )
+    .await;
+    let sid = s.initialize("2025-11-25").await;
+    let other_sid = s.initialize("2025-11-25").await;
+    let post = |slug: &str, session: &str, body: Value| {
+        s.client
+            .post(format!("{}/{slug}/mcp", s.url))
+            .header("accept", "application/json, text/event-stream")
+            .header("mcp-session-id", session)
+            .header("mcp-protocol-version", "2025-11-25")
+            .json(&body)
+    };
+    let call = json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"slow"}});
+    let request = post("test", &sid, call.clone());
+    let running =
+        tokio::spawn(async move { request.send().await.unwrap().json::<Value>().await.unwrap() });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !std::fs::read_to_string(&events)
+            .unwrap_or_default()
+            .contains("call")
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let cancel =
+        json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":7}});
+    assert_eq!(
+        post("other", &sid, cancel.clone())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    assert_eq!(
+        post("test", &other_sid, cancel.clone())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        202
+    );
+    // Possessing a session ID cannot bypass its authenticated principal binding.
+    s.state
+        .session_manager
+        .bind(&sid, "another-principal".into(), "2025-11-25".into())
+        .await;
+    assert_eq!(
+        post("test", &sid, cancel.clone())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    s.state
+        .session_manager
+        .bind(&sid, "public".into(), "2025-11-25".into())
+        .await;
+    let string_id =
+        json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"7"}});
+    assert_eq!(
+        post("test", &sid, string_id).send().await.unwrap().status(),
+        202
+    );
+    assert!(!running.is_finished());
+    assert!(!std::fs::read_to_string(&events)
+        .unwrap_or_default()
+        .contains("cancelled"));
+    let duplicate: Value = post("test", &sid, call)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(duplicate["error"]["code"], -32600);
+    // Invalid transport headers must not trigger cancellation, even with a valid JSON body.
+    assert!(!post("test", &sid, cancel.clone())
+        .headers(
+            [(
+                reqwest::header::CONTENT_TYPE,
+                reqwest::header::HeaderValue::from_static("text/plain")
+            )]
+            .into_iter()
+            .collect()
+        )
+        .send()
+        .await
+        .unwrap()
+        .status()
+        .is_success());
+    assert!(!running.is_finished());
+    // Even when all ordinary call slots are occupied, cancellation remains usable.
+    let gate = s
+        .state
+        .mount_permits
+        .read()
+        .await
+        .get("test")
+        .unwrap()
+        .clone();
+    let remaining_permit = gate.try_acquire_owned().unwrap();
+    let response = post("test", &sid, cancel.clone()).send().await.unwrap();
+    assert_eq!(response.status(), 202);
+    assert!(response.bytes().await.unwrap().is_empty());
+    let reply = tokio::time::timeout(std::time::Duration::from_secs(5), running)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(reply.get("error").is_some(), "{reply}");
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !std::fs::read_to_string(&events)
+            .unwrap_or_default()
+            .contains("cancelled")
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    drop(remaining_permit);
+    // A completed ID is reusable; an old/unknown cancellation leaves no stored tombstone.
+    assert_eq!(
+        post("test", &sid, cancel).send().await.unwrap().status(),
+        202
+    );
+    let reply: Value = post(
+        "test",
+        &sid,
+        json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"counter"}}),
+    )
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(reply["result"]["structuredContent"]["value"], 1);
+    for session in [&sid, &other_sid] {
+        assert_eq!(
+            s.client
+                .delete(format!("{}/test/mcp", s.url))
+                .header("mcp-session-id", session)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            204
+        );
+    }
+    assert!(s.state.upstream_children.read().await.is_empty());
+}

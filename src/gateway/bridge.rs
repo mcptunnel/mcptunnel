@@ -11,6 +11,7 @@ use std::{borrow::Cow, sync::Arc};
 pub struct Bridge {
     pub state: Arc<AppState>,
     pub mount: MountRecord,
+    pub legacy_cancellation: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl Bridge {
@@ -68,9 +69,20 @@ impl Bridge {
                 .ok_or_else(|| {
                     ErrorData::invalid_request("session expired; initialize again", None)
                 })?;
-            child
-                .request_with_progress(method, params, context.meta, &context.ct, sink)
-                .await?
+            let request =
+                child.request_with_progress(method, params, context.meta, &context.ct, sink);
+            tokio::pin!(request);
+            if let Some(cancellation) = &self.legacy_cancellation {
+                tokio::select! {
+                    result = &mut request => result?,
+                    _ = cancellation.cancelled() => {
+                        context.ct.cancel();
+                        request.await?
+                    }
+                }
+            } else {
+                request.await?
+            }
         };
         if modern {
             if value.get("resultType").is_some_and(|v| v != "complete") {
