@@ -148,7 +148,7 @@ The authoritative workboard is [td#596](https://tdtd.dev/596). Historical broad 
 |---|---|---|
 | Now — corrected | Reproducible first connection, truthful capability docs, pinned Rust toolchain, authenticated legacy cancellation, actionable public DNS/HTTP diagnostics | td#597–td#602 |
 | Now — verify | One actual Codex connection, supported JWT/hosting boundary, final local native candidate | td#603–td#605; [current results](PUBLIC_READINESS.md) |
-| Now — publication gate | Public destination/visibility decision, explicitly authorized release Actions, anonymous download/install verification | [td#606](https://tdtd.dev/606) |
+| Release operation — not started | Public destination/visibility decision, explicitly authorized release Actions, and a public download/install check after publication | [td#606](https://tdtd.dev/606) |
 | Future | Optional modern state continuity and interactive features; catalog refresh/workload optimization; additional named-client/hosting/platform evidence | td#607–td#610 |
 | Future — revenue | Trusted managed hostname provisioning, billing/plans/operational entitlement lifecycle | td#611–td#612 |
 

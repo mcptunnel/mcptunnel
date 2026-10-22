@@ -54,6 +54,8 @@ Cloudflared is pinned to 2026.10.0 with per-platform digests from its official G
 
 ## Current publication gate
 
+This section describes release execution, not missing development work. Public-URL installation is checked after publishing assets; the local archive installer already passed. The separate DNS observation on the audit Mac does not establish a product defect or a prerequisite for publication.
+
 See [the current readiness report](PUBLIC_READINESS.md) and [td#606](https://tdtd.dev/606). Version 0.3.6 is a local macOS ARM64 candidate; the previous five-platform evidence below applies to 0.3.1, not the new gateway changes. Before publishing:
 
 1. The owner chooses/authorizes the public download destination and any repository visibility change.

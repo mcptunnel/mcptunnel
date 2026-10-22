@@ -1,6 +1,6 @@
 # Public readiness — 2026-10-22
 
-**Development preparation is complete for the documented synchronous scope. Public launch remains blocked by normal-DNS public connectivity evidence and publication authorization.** The current local candidate is **0.3.6**, macOS ARM64. No release, tag, push, visibility change or GitHub Actions execution was performed in this work session.
+**Development preparation is complete for the documented synchronous scope. The audit established no remaining product defect from the two follow-ups below: one is environment-specific DNS behavior, the other is a release-stage operation.** The current local candidate is **0.3.6**, macOS ARM64. No release, tag, push, visibility change or GitHub Actions execution was performed in this work session.
 
 The authoritative task document is [td#596](https://tdtd.dev/596). It was written before three Astra agents worked on separate documentation, cancellation and diagnostics files. Each problem has its own task; future features are not silently treated as launch defects.
 
@@ -18,14 +18,16 @@ The authoritative task document is [td#596](https://tdtd.dev/596). It was writte
 | [td#604](https://tdtd.dev/604) | External OAuth/hosting claims exceeded evidence | Signed-JWT HTTP/resource/scope/expiry/session tests pass; local routing passes. Browser authorization and independent HTTPS proxy remain explicitly unverified. |
 | [td#605](https://tdtd.dev/605) | Current fixes lacked a native candidate | 0.3.6 macOS ARM64 release build, archive, real installer/reinstaller/PATH/tamper checks and real Filesystem smoke pass. |
 
-## Now: still blocked
+## Follow-ups: environment and release execution
 
-| Task | Observed blocker | Exact completion evidence |
+The original report incorrectly called both items launch blockers. Neither establishes unfinished product implementation.
+
+| Task | Classification | What it means |
 |---|---|---|
-| [td#613](https://tdtd.dev/613) | This Mac's normal resolver cannot resolve newly announced Quick hostnames. Provider registration/local health succeed; earlier public Filesystem checks passed only with a process-local alternate resolver. | One public Quick HTTPS Filesystem run through the normal resolver after the existing network/resolver path becomes healthy. No system DNS changes or hidden bypass count as a fix. |
-| [td#606](https://tdtd.dev/606) | Repository/download destination is not public; Actions remains disabled; no published release exists. | Owner authorizes the destination/visibility and one release execution, final native jobs pass, then anonymous public download/install succeeds. [Concrete release procedure](RELEASING.md#current-publication-gate). |
+| [td#613](https://tdtd.dev/613) | Environment observation; optional investigation | This Mac's normal resolver failed for temporary Quick hostnames during the public test. The same public flow passed through an alternate resolver. This points to the local resolver/network path; repairing this Mac's DNS is not a prerequisite for publishing the project. Ordinary connectivity from this environment is still not claimed verified. |
+| [td#606](https://tdtd.dev/606) | Release operation; not started | After publishing release assets, download through the public URL and confirm installation. The local archive installer already passed. This last deployment check cannot happen before a public artifact exists and is not a missing product feature. Existing authorization requirements for publishing/Actions still apply. [Release procedure](RELEASING.md#current-publication-gate). |
 
-These are real launch gates, not future feature requests. The 0.3.1 five-platform candidate is historical and lacks the new fixes. Current source changes have only been verified on this Mac; the authorized publication workflow must build the advertised assets before release.
+The preparation master is DONE. The historical 0.3.1 five-platform candidate lacks current fixes; current source verification is scoped to this Mac. Building the advertised release assets belongs to the explicitly requested release operation.
 
 ## What works and what is not established
 
