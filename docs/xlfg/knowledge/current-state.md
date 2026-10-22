@@ -1,53 +1,14 @@
-# Current State
+# Current state — 2026-10-22
 
-## Architecture
-Single Rust binary (`mcptunnel`) with subcommand dispatch. Daemon runs HTTP gateway (axum) + UDS admin API + auto-started cloudflared tunnel. CLI commands communicate with daemon over Unix domain socket.
+This file supersedes the pre-modernization feature inventory. See [the user guide](../../USER_GUIDE.md) and [engineering report](../../ENGINEERING_REPORT.md) for behavior and dated evidence.
 
-## Module Layout
-```
-src/
-  main.rs, config.rs, error.rs, logging.rs, doctor.rs
-  cli/{mod,commands,output}.rs
-  daemon/{mod,admin_api,state}.rs
-  tunnel/{mod,quick,managed,supervisor}.rs
-  mount/{mod,db,slug,types}.rs
-  gateway/{mod,mcp_handler,inspection,health}.rs
-  session/{mod,types}.rs
-  upstream/{mod,probe,child}.rs
-  policy/{mod,filter,types}.rs
-  auth/{mod,public,oauth,oauth_server,types}.rs
-```
+- One Rust binary runs the CLI and daemon. Local administrative IPC uses Unix sockets or Windows named pipes; local HTTP is the default, and `--public` explicitly adds a Cloudflare Quick Tunnel.
+- Exact mount paths and per-port listeners support both local and public routes. Quick ingress excludes local mounts. Persistent mount configuration does not make temporary provider URLs stable.
+- rmcp 3.5.1 bridges modern stateless requests and supported legacy initialized sessions to stdio. Modern operations start a fresh process: upstream in-memory history does not survive across calls. Legacy sessions reuse one child bound to the mount and authenticated principal.
+- Basic authentication is the default, with a generated 128-bit password. Creation prints header credentials once; URLs and inspection do not expose passwords. Explicit `--auth public` disables authentication.
+- OAuth is external only: HTTPS issuer discovery/JWKS and RS256 access-token validation. The external authorization server owns login, consent, registration, PKCE and refresh. Built-in OAuth and inherit auth fail closed. Actual account-backed authorization flows are unverified.
+- POST supports synchronous JSON and, on capable independent hosting, request-scoped progress SSE. GET subscription streams return 405. Quick suppresses progress and uses synchronous JSON.
+- Policy filters tool discovery/invocation, resources, prompts and completion. Upstream processes retain the operator's permissions; this is not an OS sandbox.
+- Tasks, subscriptions/replay, interactive MRTR, sampling/elicitation callbacks, logging and MCP Apps are unsupported. Managed hosting is unavailable. Full conformance does not pass.
 
-## Key Crates
-- rmcp 1.3 (client + transport-child-process) — upstream stdio MCP client
-- axum 0.8 — HTTP gateway
-- rusqlite 0.32 (bundled) — SQLite persistence
-- clap 4 — CLI
-- tokio 1 — async runtime
-- tracing — structured logging
-- jsonwebtoken 9 — JWT validation + signing
-- rsa 0.9 — RSA key pair generation (pure Rust)
-- tokio-stream — SSE streaming
-- base64 0.22 — HTTP Basic Auth decoding
-- subtle 2 — constant-time credential comparison
-
-## Test Coverage
-65 unit tests covering: config parsing, policy filtering, session lifecycle, mount CRUD, slug generation, auth helpers (public, basic, oauth, oauth_server), logging utilities, tunnel URL parsing, JWKS cache, basic auth credential generation/validation/DB round-trip, RSA key generation, JWT signing/verification, PKCE S256, DCR state, auth code lifecycle, HTML escaping/XSS prevention, tunnel-wait (ready/timeout/hot-path/managed-bypass).
-
-## Feature Completeness
-- CLI: all 9 subcommands implemented (run, list, inspect, logs, stop, doctor, daemon, tunnel, gc)
-- Daemon: auto-start from CLI, session eviction, UDS admin API
-- Tunnel: quick mode auto-starts on daemon startup with supervision and restart; `wait_for_tunnel_ready` in admin handlers ensures mount creation/inspect waits for tunnel URL (bounded 30s poll)
-- Gateway: POST/GET/DELETE on /<slug>/mcp, SSE with keepalive + notification sender infrastructure
-- Auth: **basic (default)**, public (noauth injection), inherit, OAuth (built-in AS + external AS)
-  - Basic Auth: auto-generated credentials (mct + 16-char hex), constant-time validation (subtle crate), credentials-in-URL output
-  - OAuth (built-in AS): full MCP-spec-compliant OAuth 2.1 Authorization Server — DCR (RFC 7591), PKCE S256, authorization code flow, JWT token issuance (RS256), JWKS endpoint, AS metadata (RFC 8414), Protected Resource Metadata (RFC 9728). Auto-generated user/password. Compatible with ChatGPT MCP integration.
-  - OAuth (external AS): JWKS-backed JWT validation from external OIDC provider via `--oidc-issuer`
-- Policy: tool/resource/prompt filtering at list and invoke time
-- Observability: structured logging, per-mount log ring buffer, doctor diagnostics, inspect
-
-## No Remaining Gaps
-All spec features are implemented. The SSE notification forwarding infrastructure is in place
-(per-session SSE senders registered in AppState, send_sse_event API available). Full upstream
-server-initiated notification capture would require a custom rmcp ClientHandler implementation
-which is an enhancement beyond the spec's MVP scope.
+Historical 0.3.1 evidence covers 66 Rust tests per platform and five native candidates. It is not proof for subsequent source changes; current focused checks belong in the engineering report. GitHub Actions is disabled pending explicit authorization.

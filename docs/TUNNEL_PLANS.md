@@ -6,7 +6,7 @@
 | Independent local hosting | Operator supplies a reverse proxy and optionally `external_origin` | Free OSS functionality | Request-scoped progress, when the proxy supports SSE | Implemented; loopback fixture tested; independent proxy E2E NOT TESTED |
 | Official paid managed | Trusted service reserves/owns a stable hostname for an authenticated entitled account | Planned | Requires a compatible provider | UNSUPPORTED: no entitlement/provisioning service exists |
 
-Localhost is the default; `--public` explicitly selects Quick for a mount. It does not require an account or billing. Basic is the default authentication mode. Public mode is explicit; it exposes the local server's allowed operations to anyone who obtains the URL. OAuth requires the operator's external authorization server. Core diagnostics and policy are free.
+Localhost is the default; `--public` explicitly selects Quick for a mount. It does not require an account or billing. Basic is the default authentication mode. Anonymous authentication (`--auth public`) is explicit; it exposes allowed operations to anyone who obtains the URL. `--public` alone retains Basic authentication. OAuth requires the operator's external authorization server. Core diagnostics and policy are free.
 
 `--tunnel managed`, persisted managed mounts, and `--hostname` do not activate a working managed service. Selection fails with an actionable unavailable-backend error. Quick/local mounts reject a hostname assignment. No local plan, environment variable, database flag, or client token can prove payment.
 

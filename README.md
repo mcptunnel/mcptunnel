@@ -58,25 +58,20 @@ Pass your MCP server command after `--`, with any mcptunnel options before it:
 mcptunnel [options] -- <mcp-command> [args...]
 ```
 
-For example, run the official [Sequential Thinking MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking). With [Node.js 22+](https://nodejs.org/en/download) installed, launch it directly:
+Use the official [Filesystem MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) for a read-only first connection. Install [Node.js 22+](https://nodejs.org/en/download), then create a directory containing only data you intend to share:
 
 ```sh
-# Localhost
-mcptunnel -- npx -y @modelcontextprotocol/server-sequential-thinking
-# → http://localhost:8000/sequential-thinking
-
-# Custom path, same port
-mcptunnel --path /thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
-# → http://localhost:8000/thinking
-
-# Another port
-mcptunnel --port 9000 -- npx -y @modelcontextprotocol/server-sequential-thinking
-# → http://localhost:9000/sequential-thinking
-
-# Public HTTPS
-mcptunnel --public --path /public-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
-# → https://<random>.trycloudflare.com/public-thinking
+mkdir mcptunnel-demo
+printf 'Hello from mcptunnel!\n' > mcptunnel-demo/hello.txt
+mcptunnel --allow-tool read_text_file --allow-tool list_directory -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./mcptunnel-demo
+# → http://localhost:8000/filesystem
 ```
+
+In PowerShell, replace the `printf` line with `Set-Content mcptunnel-demo/hello.txt 'Hello from mcptunnel!'`. Connect with the printed Basic header, list the directory, and read `hello.txt`. The allowlist blocks write tools. File contents persist on disk between requests; the example does not depend on process memory. Use `--path /files`, `--port 9000`, or `--public` before `--` to change the endpoint or add temporary public HTTPS.
+
+The package version is deliberately pinned to the recorded verified example. npm marks this date-based release deprecated because the package moved to semantic versions; this is not a recommendation to install an untested `latest`. The historical Node 22 verification and current local check are described in the [engineering report](docs/ENGINEERING_REPORT.md#pre-public-documentation-check--2026-10-22).
+
+**Stateful-server limit:** modern (`2026-07-28`) requests start a fresh upstream process for every operation. In-memory conversation/history state does **not** survive between calls. Sequential Thinking is therefore unsuitable as this quick start. Legacy clients using a supported initialized session reuse one process until that session ends. [Protocol and state limits](docs/USER_GUIDE.md#protocol-and-limits).
 
 ## Connect your client
 
@@ -94,15 +89,15 @@ All three flags are optional:
 | `--port <port>` | `8000` | Same port shares a listener; another port opens another listener |
 | `--path <path>` | `/<server-name>` | Sets the exact MCP path, with no added `/mcp` suffix |
 
-Automatic name collisions get a suffix such as `/sequential-thinking-2`. Explicit duplicate paths on the same port fail. Public and local servers can share a port; only public servers enter the Cloudflare tunnel. [Routing and persistence details](docs/USER_GUIDE.md#ports-and-paths).
+Automatic name collisions get a suffix such as `/filesystem-2`. Explicit duplicate paths on the same port fail. Public and local servers can share a port; only public servers enter the Cloudflare tunnel. [Routing and persistence details](docs/USER_GUIDE.md#ports-and-paths).
 
 ## Manage your servers
 
 ```sh
 mcptunnel list
-mcptunnel inspect sequential-thinking
-mcptunnel doctor sequential-thinking
-mcptunnel stop sequential-thinking
+mcptunnel inspect filesystem
+mcptunnel doctor filesystem
+mcptunnel stop filesystem
 ```
 
 Use the mount name printed at creation or by `list`. You can also allow or deny individual tools, restrict resources and prompts, and configure an external OAuth issuer. [Access controls and management](docs/USER_GUIDE.md#restrict-inspect-stop).
@@ -121,6 +116,6 @@ Public Quick Tunnels are for development: URLs can change, SSE is unavailable, a
 
 ## Contributing
 
-Contributions are welcome. Building from source requires Rust 1.88+ and Node.js 22+. See the [local verification commands](docs/USER_GUIDE.md#verification-and-contributing) and [repository instructions](AGENTS.md) before submitting a PR.
+Contributions are welcome. Building from source requires Rust 1.88.0 (pinned by `rust-toolchain.toml`) and Node.js 22+. See the [local verification commands](docs/USER_GUIDE.md#verification-and-contributing) and [repository instructions](AGENTS.md) before submitting a PR.
 
 Licensed under [MIT](LICENSE).

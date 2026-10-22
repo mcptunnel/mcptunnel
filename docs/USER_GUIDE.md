@@ -79,7 +79,7 @@ Paths are inferred from common package/executable names: Filesystem → `/filesy
 
 Local and public servers may share a port. Only `--public` servers enter its Cloudflare ingress; local routes, inspection and OAuth metadata are excluded. Public servers on the same port share one temporary origin; different ports use separate origins. The last public server's removal stops its tunnel, and the last server's removal closes its listener. Ports, paths and visibility survive daemon restart; Quick origins can change. Existing pre-0.3 mounts retain their old port and `/slug/mcp` path.
 
-The first `npx` run downloads the requested MCP server. On a slow connection, cache the README example first with `npm exec --yes --package=@modelcontextprotocol/server-sequential-thinking -- node --version`, then repeat the command. The Filesystem-specific examples below pin the version used in their recorded verification. The mount captures the creating CLI's working directory; `--cwd` overrides it. Windows `npx` launchers are resolved automatically.
+The first `npx` run downloads the requested MCP server. On a slow connection, cache the README example first with `npm exec --yes --package=@modelcontextprotocol/server-filesystem@2026.8.31 -- node --version`, then repeat the command. All Filesystem examples pin the version used in recorded verification. npm deprecates that date-based version in favor of its new semantic versioning; upgrading the example requires a fresh check. Sequential Thinking 2.0.0 requires Node 24+, and its in-memory history is incompatible with modern per-request process isolation. The mount captures the creating CLI's working directory; `--cwd` overrides it. Windows `npx` launchers are resolved automatically.
 
 ## Connecting clients
 
@@ -154,7 +154,7 @@ Cloudflare documents Quick Tunnels as development-only and without SSE. URLs cha
 | Quick Tunnel | Synchronous JSON only; progress suppressed; temporary random origin |
 | Independently hosted local mode | JSON and request-scoped progress SSE; proxy must support streaming |
 
-Modern operations spawn an isolated stdio process per request. Legacy sessions reuse one process each. This protects user/session state at the cost of process startup on every modern operation. Upstream processes run with the operator's permissions; the gateway is not an OS sandbox. Process groups/jobs terminate descendants during cleanup.
+Modern operations spawn an isolated stdio process per request. Legacy sessions reuse one process each. Modern requests do not preserve upstream in-memory state across calls: conversation history, counters and cached session data restart each time. This isolates principals but makes stateful tools such as Sequential Thinking unsuitable for modern clients that expect continuity. Disk-backed data can persist, as in the read-only Filesystem quick start. Legacy initialized sessions preserve one child's in-memory state only until that session expires, is deleted, crashes or the daemon stops. Each modern operation also pays process startup cost. Upstream processes run with the operator's permissions; the gateway is not an OS sandbox. Process groups/jobs terminate descendants during cleanup.
 
 Limits: 1 MiB HTTP body, 10-second body timeout, 4 MiB stdio message, 15-second startup, 60-second request, 64 global requests, default 8 requests per mount/session, default 8 sessions per mount, and 256 sessions globally. Discovery is bounded to 4,096 entries, 64 pages and 16 MiB per catalog. Request timeout and SSE disconnect cancellation are verified. Reinitialize a legacy session after its upstream crashes.
 
@@ -181,7 +181,7 @@ The gateway passes the explicitly selected supported conformance subset. **Full 
 
 ## Verification and contributing
 
-Building from source is for contributors (Rust 1.88+, Node 22+):
+Building from source is for contributors (Rust 1.88.0 pinned by `rust-toolchain.toml`, Node 22+):
 
 ```sh
 cargo fmt --all -- --check
