@@ -32,7 +32,7 @@ readline.createInterface({input:process.stdin}).on('line', line => {
       if (p.name === 'crash') return process.exit(17);
       if (p.name === 'hang') { record('call'); return; }
       if (p.name === 'error') return error(req.id,-32602,'fixture error',{detail:'preserved'});
-      if (p.name === 'slow') { record('call'); timers.set(req.id,setTimeout(()=>reply(req.id,{content:[{type:'text',text:'done'}]}),30000)); return; }
+      if (p.name === 'slow') { record('call'); timers.set(req.id,setTimeout(()=>reply(req.id,{content:[{type:'text',text:'done'}]}),Number(process.env.FIXTURE_SLOW_MS || 30000))); return; }
       if (!['counter','echo'].includes(p.name)) return error(req.id,-32601,'unknown tool');
       const value = p.name === 'counter' ? ++count : (p.arguments?.text || 'echo');
       return reply(req.id,{content:[{type:'text',text:String(value)}],structuredContent:{value},isError:false,_meta:{fixture:'output',traceparent:p._meta?.traceparent}});

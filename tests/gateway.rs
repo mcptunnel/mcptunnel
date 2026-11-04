@@ -48,6 +48,7 @@ async fn server_options(
     ] {
         let record = registry
             .create(MountCreateParams {
+                upstream_lifetime: mcptunnel::config::UpstreamLifetime::Request,
                 port: listener.local_addr().unwrap().port(),
                 path: Some(format!("/{slug}/mcp")),
                 slug: Some(slug.into()),
@@ -845,4 +846,136 @@ async fn legacy_cross_request_cancellation_is_scoped_and_releases_request_id() {
         );
     }
     assert!(s.state.upstream_children.read().await.is_empty());
+}
+
+#[tokio::test]
+async fn modern_keep_alive_continues_and_default_isolates() {
+    let temp = tempfile::tempdir().unwrap();
+    let events = temp.path().join("events");
+    let s = server(PolicyConfig::default()).await;
+    let original = s.state.mount_registry.get("private").unwrap().unwrap();
+    let creds = original.basic_credentials.clone().unwrap();
+    let params = MountCreateParams {
+        upstream_lifetime: mcptunnel::config::UpstreamLifetime::Retained,
+        slug: Some("retained".into()),
+        port: original.port,
+        path: Some("/retained/mcp".into()),
+        display_name: None,
+        command: original.command.clone(),
+        cwd: None,
+        tunnel_mode: original.tunnel_mode,
+        hostname: None,
+        auth_mode: AuthModeConfig::Basic,
+        basic_credentials: Some(creds.clone()),
+        oauth_config: None,
+        policy: PolicyConfig {
+            deny_tools: vec!["echo".into()],
+            ..Default::default()
+        },
+        env_vars: vec![(
+            "FIXTURE_EVENTS".into(),
+            events.to_string_lossy().into_owned(),
+        )],
+    };
+    for auth in [AuthModeConfig::Public, AuthModeConfig::Inherit] {
+        assert!(s
+            .state
+            .mount_registry
+            .create(MountCreateParams {
+                auth_mode: auth,
+                ..params.clone()
+            })
+            .is_err());
+    }
+    let retained = s.state.mount_registry.create(params.clone()).unwrap();
+    let other = s
+        .state
+        .mount_registry
+        .create(MountCreateParams {
+            slug: Some("retained-other".into()),
+            path: Some("/retained-other/mcp".into()),
+            env_vars: vec![],
+            ..params
+        })
+        .unwrap();
+    s.state.retained.register(other.id, false);
+    s.state
+        .mount_registry
+        .set_probe_result(&other.slug, original.last_probe_result.as_ref().unwrap())
+        .unwrap();
+    s.state.retained.register(retained.id, false);
+    s.state
+        .mount_registry
+        .set_probe_result("retained", original.last_probe_result.as_ref().unwrap())
+        .unwrap();
+    let unauth = s
+        .post(
+            &retained.slug,
+            &modern(
+                "tools/call",
+                json!({"name":"counter","requestState":null,"inputResponses":null}),
+            ),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unauth.status(), 401);
+    let denied: Value = s
+        .post(
+            &retained.slug,
+            &modern("tools/call", json!({"name":"echo"})),
+        )
+        .basic_auth(&creds.username, Some(&creds.password))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(denied.get("error").is_some());
+    assert!(
+        !events.exists(),
+        "denied requests must not spawn an upstream"
+    );
+    assert_eq!(s.state.retained.summary(retained.id)["contexts"], 0);
+    for (slug, values) in [
+        (retained.slug.as_str(), [1, 2]),
+        (other.slug.as_str(), [1, 2]),
+        ("private", [1, 1]),
+    ] {
+        for value in values {
+            let list = s
+                .post(slug, &modern("tools/list", json!({})))
+                .basic_auth(&creds.username, Some(&creds.password))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(list.status(), 200);
+            let response = s
+                .post(
+                    slug,
+                    &modern(
+                        "tools/call",
+                        json!({"name":"counter","requestState":null,"inputResponses":null}),
+                    ),
+                )
+                .basic_auth(&creds.username, Some(&creds.password))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), 200);
+            assert!(!response.headers().contains_key("mcp-session-id"));
+            let body: Value = response.json().await.unwrap();
+            assert_eq!(body["result"]["structuredContent"]["value"], value);
+        }
+    }
+    assert_eq!(
+        std::fs::read_to_string(&events)
+            .unwrap()
+            .lines()
+            .filter(|line| line.starts_with("start "))
+            .count(),
+        1
+    );
+    s.state.retained.shutdown().await;
 }

@@ -53,6 +53,13 @@ pub fn print_mount_inspect(data: &Value) {
     );
     println!("  MCP URL:        {}", data["url"].as_str().unwrap_or("?"));
     println!(
+        "  Upstream:       {}",
+        data["upstream_lifetime"].as_str().unwrap_or("request")
+    );
+    if data["upstream_lifetime"] == "retained" {
+        println!("  Retained state: {}", data["retained"]);
+    }
+    println!(
         "  Sessions:       {}",
         data["active_sessions"].as_u64().unwrap_or(0)
     );

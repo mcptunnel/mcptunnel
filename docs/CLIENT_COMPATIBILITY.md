@@ -2,6 +2,12 @@
 
 mcptunnel bridges current stateless HTTP requests to real legacy stdio servers. This has passed automated gateway tests. **Codex CLI 0.146.0 passed one real local Basic-authenticated connection** using an existing ChatGPT login: legacy `2025-06-18` initialization, tool discovery, Filesystem `read_text_file` and session deletion. [Redacted evidence](CODEX_E2E_RESULTS.json) records actual wire methods and the successful MCP tool event. An observation-only loopback proxy captured protocol metadata; this is not independent HTTPS hosting or public Quick client proof. Other named clients and external browser OAuth remain unverified.
 
+## 0.4.0: browser process continuity
+
+Opt-in `--keep-alive` retains an upstream process by mount and authenticated identity/scope set while preserving the modern sessionless HTTP wire format. Same credentials on one mount share state; independent workflows need separate mounts. Legacy sessions and the default per-request mode keep their existing behavior. This is not support for optional MRTR, sampling, elicitation, subscriptions or MCP Apps.
+
+Focused fixtures cover same-owner continuity, default isolation, separate mounts, OAuth subject/scope separation, lifecycle loss/reset, shared quotas, default-off DB migration and old-daemon refusal. The real-browser acceptance uses `@playwright/mcp@0.0.84`, existing headless Chrome with an isolated profile, localhost Basic-authenticated protocol `2026-07-28` requests and a nonce in an owned page. See [0.4.0 verification](releases/v0.4.0.md) for the actual recorded outcome. It does not add account-backed client PASS rows to the existing matrix.
+
 ## Evidence levels and every combination
 
 The complete [CSV matrix](CLIENT_COMPATIBILITY.csv) has **2,880 unique combinations**: eight client surfaces × four revisions × three transports × three authentication modes × ten operations. OpenAI API/Codex and Claude Code/Desktop are separated because their configuration and hosting differ.

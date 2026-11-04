@@ -22,6 +22,16 @@ impl MountRegistry {
 
     /// Create a new mount, generating a slug if not provided.
     pub fn create(&self, params: MountCreateParams) -> Result<MountRecord> {
+        if params.upstream_lifetime == crate::config::UpstreamLifetime::Retained
+            && !matches!(
+                params.auth_mode,
+                AuthModeConfig::Basic | AuthModeConfig::OAuth
+            )
+        {
+            return Err(McpTunnelError::CliUsage(
+                "--keep-alive requires Basic or external OAuth authentication".into(),
+            ));
+        }
         crate::tunnel::validate_selection(params.tunnel_mode, params.hostname.as_deref())
             .map_err(McpTunnelError::CliUsage)?;
         let conn = self
@@ -96,6 +106,7 @@ impl MountRegistry {
 
         let now = chrono::Utc::now();
         let record = MountRecord {
+            upstream_lifetime: params.upstream_lifetime,
             id: uuid::Uuid::new_v4(),
             slug: mount_slug,
             port: params.port,

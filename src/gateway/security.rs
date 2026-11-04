@@ -62,24 +62,46 @@ pub async fn validate_boundary(
     Ok(())
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AuthenticatedOwner {
+    Basic(uuid::Uuid),
+    OAuth {
+        issuer: String,
+        subject: String,
+        scopes: Vec<String>,
+    },
+    Public,
+}
+impl AuthenticatedOwner {
+    pub fn legacy_principal(&self) -> String {
+        match self {
+            Self::Basic(id) => format!("basic:{id}"),
+            Self::OAuth {
+                issuer, subject, ..
+            } => format!("oauth:{issuer}:{subject}"),
+            Self::Public => "public".into(),
+        }
+    }
+}
+
 pub async fn authorize(
     state: &AppState,
     mount: &MountRecord,
     headers: &HeaderMap,
-) -> Result<String, Response> {
+) -> Result<AuthenticatedOwner, Response> {
     if headers.get_all("authorization").iter().count() > 1 {
         return Err(StatusCode::BAD_REQUEST.into_response());
     }
     let header = headers.get("authorization").and_then(|v| v.to_str().ok());
     match mount.auth_mode {
-        AuthModeConfig::Public => Ok("public".into()),
+        AuthModeConfig::Public => Ok(AuthenticatedOwner::Public),
         AuthModeConfig::Inherit => Err((StatusCode::SERVICE_UNAVAILABLE, "inherit auth cannot authenticate stdio; recreate with basic, oauth or explicit public mode").into_response()),
         AuthModeConfig::Basic => {
             let Some(creds) = &mount.basic_credentials else { return Err(StatusCode::SERVICE_UNAVAILABLE.into_response()); };
             crate::auth::basic::validate_basic_auth(header, creds).map_err(|_| {
                 (StatusCode::UNAUTHORIZED, [("www-authenticate", "Basic realm=\"mcptunnel\", charset=\"UTF-8\"")], Json(json!({"error":"authentication required"}))).into_response()
             })?;
-            Ok(format!("basic:{}", mount.id))
+            Ok(AuthenticatedOwner::Basic(mount.id))
         }
         AuthModeConfig::OAuth => {
             let Some(config) = &mount.oauth_config else { return Err(StatusCode::SERVICE_UNAVAILABLE.into_response()); };
@@ -95,7 +117,8 @@ pub async fn authorize(
                 return Err((StatusCode::FORBIDDEN, [("www-authenticate", "Bearer error=\"insufficient_scope\"")], Json(json!({"error":"insufficient_scope"}))).into_response());
             }
             let sub = claims.subject.filter(|s| !s.is_empty()).ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
-            Ok(format!("oauth:{}:{sub}", config.issuer))
+            let mut scopes = claims.scopes; scopes.sort(); scopes.dedup();
+            Ok(AuthenticatedOwner::OAuth { issuer: config.issuer.clone(), subject: sub, scopes })
         }
     }
 }

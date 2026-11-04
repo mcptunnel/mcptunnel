@@ -14,6 +14,7 @@ pub struct AppState {
     pub config: Config,
     pub mount_registry: MountRegistry,
     pub session_manager: SessionManager,
+    pub retained: crate::upstream::retained::RetainedRegistry,
     pub tunnel_origins: RwLock<HashMap<u16, String>>,
     pub(crate) listeners:
         tokio::sync::Mutex<std::collections::BTreeMap<u16, super::listeners::PortRuntime>>,
@@ -40,10 +41,21 @@ impl AppState {
         mount_registry: MountRegistry,
         session_config: SessionConfig,
     ) -> Self {
+        let session_manager = SessionManager::new(session_config.clone());
+        let retained = crate::upstream::retained::RetainedRegistry::new(
+            session_config,
+            session_manager.budget.clone(),
+        );
+        for mount in mount_registry.list().unwrap_or_default() {
+            if mount.upstream_lifetime == crate::config::UpstreamLifetime::Retained {
+                retained.register(mount.id, true);
+            }
+        }
         Self {
             config,
             mount_registry,
-            session_manager: SessionManager::new(session_config),
+            session_manager,
+            retained,
             tunnel_origins: RwLock::new(HashMap::new()),
             listeners: tokio::sync::Mutex::new(std::collections::BTreeMap::new()),
             registration: tokio::sync::Mutex::new(()),

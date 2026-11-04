@@ -21,9 +21,38 @@ pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// SDK-owned stdio lifecycle; Auto probes discovery, then initializes legacy peers.
 pub struct UpstreamChild {
+    closed: CancellationToken,
     client: RunningService<RoleClient, UpstreamHandler>,
     handler: UpstreamHandler,
     cancellation_sent: Arc<AtomicBool>,
+}
+
+pub enum UpstreamFailure {
+    Rpc(ErrorData),
+    Disconnected(ErrorData),
+    Uncertain(ErrorData),
+}
+impl UpstreamFailure {
+    pub fn into_rpc(self) -> ErrorData {
+        match self {
+            Self::Rpc(e) | Self::Disconnected(e) | Self::Uncertain(e) => e,
+        }
+    }
+    pub fn loss_reason(&self) -> &'static str {
+        match self {
+            Self::Uncertain(_) => "upstream_uncertain",
+            _ => "upstream_crashed",
+        }
+    }
+}
+impl From<ServiceError> for UpstreamFailure {
+    fn from(error: ServiceError) -> Self {
+        match error {
+            ServiceError::McpError(e) => Self::Rpc(e),
+            e @ ServiceError::Timeout { .. } => Self::Uncertain(map_error(e)),
+            e => Self::Disconnected(map_error(e)),
+        }
+    }
 }
 
 impl UpstreamChild {
@@ -46,6 +75,7 @@ impl UpstreamChild {
                 "cannot start configured stdio command".into(),
             )
         })?;
+        let closed = transport.closed.clone();
         let cancellation_sent = transport.cancellation_sent.clone();
         let handler = UpstreamHandler::default();
         let client = tokio::time::timeout(
@@ -70,6 +100,7 @@ impl UpstreamChild {
             )
         })?;
         Ok(Self {
+            closed,
             client,
             handler,
             cancellation_sent,
@@ -95,11 +126,28 @@ impl UpstreamChild {
     pub async fn request_with_progress(
         &self,
         method: &str,
+        params: serde_json::Value,
+        meta: RequestMetaObject,
+        ct: &CancellationToken,
+        sink: Option<ProgressSink>,
+    ) -> Result<serde_json::Value, ErrorData> {
+        self.request_with_progress_detailed(method, params, meta, ct, sink)
+            .await
+            .map_err(UpstreamFailure::into_rpc)
+    }
+
+    pub fn closed(&self) -> CancellationToken {
+        self.closed.clone()
+    }
+
+    pub async fn request_with_progress_detailed(
+        &self,
+        method: &str,
         mut params: serde_json::Value,
         mut meta: RequestMetaObject,
         ct: &CancellationToken,
         sink: Option<ProgressSink>,
-    ) -> Result<serde_json::Value, ErrorData> {
+    ) -> Result<serde_json::Value, UpstreamFailure> {
         if let Some(obj) = params.as_object_mut() {
             obj.remove("_meta");
         }
@@ -109,7 +157,9 @@ impl UpstreamChild {
         });
         let request: ClientRequest =
             serde_json::from_value(serde_json::json!({"method": method, "params": params}))
-                .map_err(|_| ErrorData::invalid_params("invalid MCP parameters", None))?;
+                .map_err(|_| {
+                    UpstreamFailure::Rpc(ErrorData::invalid_params("invalid MCP parameters", None))
+                })?;
         let gate = self.handler.registration.lock().await;
         let handle = self
             .client
@@ -118,7 +168,7 @@ impl UpstreamChild {
                 PeerRequestOptions::with_timeout(REQUEST_TIMEOUT).with_meta(meta),
             )
             .await
-            .map_err(map_error)?;
+            .map_err(UpstreamFailure::from)?;
         let _route = self.handler.register(handle.progress_token.clone(), sink);
         drop(gate);
         let upstream_id = handle.id.clone();
@@ -128,7 +178,7 @@ impl UpstreamChild {
                 self.cancellation_sent.store(true, Ordering::Release);
                 let notification = rmcp::model::CancelledNotificationParam::new(Some(upstream_id), Some("downstream cancelled".into()));
                 let _ = self.client.notify_cancelled(notification).await;
-                return Err(ErrorData::internal_error("request cancelled", None));
+                return Err(UpstreamFailure::Uncertain(ErrorData::internal_error("request cancelled", None)));
             }
             result = handle.await_response() => result,
         };
@@ -142,9 +192,13 @@ impl UpstreamChild {
                 ))
                 .await;
         }
-        let result = result.map_err(map_error)?;
-        serde_json::to_value(result)
-            .map_err(|_| ErrorData::internal_error("invalid upstream result", None))
+        let result = result.map_err(UpstreamFailure::from)?;
+        serde_json::to_value(result).map_err(|_| {
+            UpstreamFailure::Disconnected(ErrorData::internal_error(
+                "invalid upstream result",
+                None,
+            ))
+        })
     }
 
     pub async fn shutdown(mut self) {

@@ -41,6 +41,13 @@ pub enum Commands {
         json: bool,
     },
 
+    /// Reset all owners' retained state on a mount; keep its URL and credentials.
+    Reset {
+        slug: String,
+        #[arg(long)]
+        json: bool,
+    },
+
     /// View sanitized gateway logs.
     Logs {
         /// Mount slug.
@@ -99,6 +106,11 @@ pub struct RunOptions {
     /// Open a temporary Cloudflare HTTPS URL for this server.
     #[arg(long, conflicts_with = "tunnel")]
     pub public: bool,
+
+    /// Keep modern upstream state per authenticated owner. Same credentials share state;
+    /// use separate mounts for independent workflows. Loss/restart requires reset.
+    #[arg(long)]
+    pub keep_alive: bool,
 
     /// Local listener port (default: 8000, or daemon.bind in custom config).
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
