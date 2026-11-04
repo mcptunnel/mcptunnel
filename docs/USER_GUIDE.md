@@ -126,11 +126,11 @@ Cloudflare documents Quick Tunnels as development-only and without SSE. URLs cha
 | Quick Tunnel | Synchronous JSON only; progress suppressed; temporary random origin |
 | Independently hosted local mode | JSON and request-scoped progress SSE; proxy must support streaming |
 
-By default, modern operations spawn a separate stdio process per request. Opt-in `--keep-alive` in the 0.4.0 source candidate changes this lifetime for authenticated mounts, as described below. Legacy sessions reuse one process each. Default modern requests do not preserve upstream in-memory state across calls: conversation history, counters and cached session data restart each time. This isolates principals but makes stateful tools such as Sequential Thinking unsuitable for modern clients that expect continuity. Disk-backed data can persist, as in the read-only Filesystem quick start. Legacy initialized sessions preserve one child's in-memory state only until that session expires, is deleted, crashes or the daemon stops. Each modern operation also pays process startup cost. Upstream processes run with the operator's permissions; the gateway is not an OS sandbox. Process groups/jobs terminate descendants during cleanup.
+By default, modern operations spawn a separate stdio process per request. Opt-in `--keep-alive` in 0.4.0 or newer changes this lifetime for authenticated mounts, as described below. Legacy sessions reuse one process each. Default modern requests do not preserve upstream in-memory state across calls: conversation history, counters and cached session data restart each time. This isolates principals but makes stateful tools such as Sequential Thinking unsuitable for modern clients that expect continuity. Disk-backed data can persist, as in the read-only Filesystem quick start. Legacy initialized sessions preserve one child's in-memory state only until that session expires, is deleted, crashes or the daemon stops. Each modern operation also pays process startup cost. Upstream processes run with the operator's permissions; the gateway is not an OS sandbox. Process groups/jobs terminate descendants during cleanup.
 
-### Keep upstream state (0.4.0 source candidate)
+### Keep upstream state
 
-This is a local source candidate, not a published binary release. Build with `cargo build` and use `./target/debug/mcptunnel` in place of `mcptunnel` in the examples below. Add `--keep-alive` before `--` when creating a Basic- or external-OAuth-authenticated mount. Old mounts and omitted configuration remain `request` lifetime; legacy initialized sessions are unaffected.
+Install 0.4.0 or newer. Add `--keep-alive` before `--` when creating a Basic- or external-OAuth-authenticated mount. Old mounts and omitted configuration remain `request` lifetime; legacy initialized sessions are unaffected.
 
 ```sh
 mcptunnel --keep-alive --path /browser -- npx -y @playwright/mcp@0.0.84 --browser chrome --headless --isolated
@@ -158,7 +158,7 @@ Retained state stays only in daemon memory. Separate upstream processes do not i
 
 The CLI preflights daemon capability `modern_upstream_retention_v1` before creating a retained mount or resetting one. An older daemon is rejected with an explicit update/restart instruction; the CLI never automatically restarts an existing daemon. Creation also echoes `upstream_lifetime: retained`. Missing DB/JSON/IPC fields default to `request`; unknown stored lifetime values fail closed.
 
-One local wire check of the actual browser server is recorded in [0.4.0 candidate notes](releases/v0.4.0.md). It is not account-backed AI-client, external OAuth, public Quick Tunnel, cross-platform or full optional-conformance evidence.
+One local wire check of the actual browser server is recorded in [0.4.0 release notes](releases/v0.4.0.md). It is not account-backed AI-client, external OAuth, public Quick Tunnel, cross-platform or full optional-conformance evidence.
 
 Limits: 1 MiB HTTP body, 10-second body timeout, 4 MiB stdio message, 15-second startup, 60-second request, 64 global requests, default 8 requests per mount/session, default 8 sessions per mount, and 256 sessions globally. Discovery is bounded to 4,096 entries, 64 pages and 16 MiB per catalog. Request timeout and SSE disconnect cancellation are verified. Reinitialize a legacy session after its upstream crashes.
 
