@@ -54,13 +54,21 @@ Cloudflared is pinned to 2026.10.0 with per-platform digests from its official G
 
 ## Current publication gate
 
+**Completed on 2026-11-04:** [v0.4.0 is public](https://github.com/mcptunnel/mcptunnel/releases/tag/v0.4.0), tagged at `2caefb1575be4ab0325b63431632c6812a96c565` after [PR #2](https://github.com/mcptunnel/mcptunnel/pull/2). [Release run 41813295292](https://github.com/mcptunnel/mcptunnel/actions/runs/41813295292) passed all ten jobs in one authorized tag-triggered execution: three OS CI jobs, the 50-scenario supported conformance subset, five native archive/install/Filesystem jobs and publication. Rust tests passed 75 on Linux/macOS and 74 on Windows (the old-daemon Unix-socket fixture is Unix-only).
+
+Anonymous access confirmed the latest release, all eight assets and five archive digests against SHA256SUMS. The public `releases/latest/download/install.sh` installed the macOS ARM64 archive as version 0.4.0 into disposable storage with PATH changes and cloudflared installation opted out. Using that installed binary, actual Playwright MCP navigation followed by a separate evaluate call preserved both URL and page-memory nonce; reset cleared the retained context, and the owned daemon/state were removed. This is browser wire verification over authenticated localhost HTTP; it does not establish account-backed AI-client, external OAuth login or browser continuity through public Quick Tunnel.
+
+Both workflows were restored to `disabled_manually`. Temporary release installation and scratch artifacts were removed after verification; detailed QA evidence remains outside the repository. Future Actions runs still require authorization under AGENTS.md.
+
+## Evidence
+
+### v0.3.7 publication (historical)
+
 **Completed on 2026-10-22:** [v0.3.7 is public](https://github.com/mcptunnel/mcptunnel/releases/tag/v0.3.7). The repository is public, all commits for the release are pushed, and [release run 39834008220](https://github.com/mcptunnel/mcptunnel/actions/runs/39834008220) passed all ten jobs: three OS verification jobs, the supported conformance subset, five native candidates and publication.
 
 Each OS passed 70 Rust tests, strict Clippy, fmt and routing. All five archives passed their actual installer and real Filesystem checks. An anonymous macOS ARM64 installation from `releases/latest/download/install.sh` then downloaded the public archive/checksums, installed 0.3.7, configured a fresh zsh PATH and passed the real Filesystem Basic/read/list/write-denial flow using the installed binary. Test installation, configuration and processes were cleaned up. [Exact release, assets and verification evidence](PUBLIC_RELEASE_RESULTS.json).
 
 This was one explicitly authorized release execution. Both workflows were restored to their previous disabled state afterward; future Actions execution still requires authorization under AGENTS.md. The earlier audit Mac's Quick DNS observation is unrelated to the successful public GitHub download/install check.
-
-## Evidence
 
 Version **0.3.1** passed [Linux/macOS/Windows CI](https://github.com/mcptunnel/mcptunnel/actions/runs/37863297281): 66 tests per platform, fmt, strict Clippy, release builds, routing smoke and 50 supported conformance scenarios. Its [native candidate run](https://github.com/mcptunnel/mcptunnel/actions/runs/37863330366) passed all five target jobs and the actual official Filesystem MCP. Both macOS architectures verified zsh/bash startup, including custom ZDOTDIR; both Linux architectures verified bash/fish startup, including XDG_CONFIG_HOME. Real archive tests covered preserved profile content/PATH, repeated installation/activation, relocation, opt-out, read-only profiles, special characters and corruption before writes. All five downloaded archive digests match their sidecars. [Exact source commit, checksums and checks](INSTALLER_PATH_RESULTS.json) are retained. This is a verified candidate; no tag or release was published.
 
