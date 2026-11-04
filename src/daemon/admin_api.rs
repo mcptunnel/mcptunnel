@@ -11,6 +11,7 @@ use crate::mount::types::*;
 pub enum AdminRequest {
     MountCreate(Box<MountCreateRequest>),
     MountDelete { slug: String },
+    MountReset { slug: String },
     MountList,
     MountInspect { slug: String },
     MountLogsTail { slug: String, lines: Option<usize> },
@@ -33,6 +34,8 @@ pub enum AdminResponse {
 /// Request to create a mount (simplified for IPC).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MountCreateRequest {
+    #[serde(default)]
+    pub upstream_lifetime: crate::config::UpstreamLifetime,
     pub slug: Option<String>,
     pub port: Option<u16>,
     pub path: Option<String>,
@@ -58,6 +61,7 @@ pub async fn handle_admin_request(state: &Arc<AppState>, request: AdminRequest) 
     match request {
         AdminRequest::MountCreate(req) => handle_mount_create(state, *req).await,
         AdminRequest::MountDelete { slug } => handle_mount_delete(state, &slug).await,
+        AdminRequest::MountReset { slug } => handle_mount_reset(state, &slug).await,
         AdminRequest::MountList => handle_mount_list(state).await,
         AdminRequest::MountInspect { slug } => handle_mount_inspect(state, &slug).await,
         AdminRequest::MountLogsTail { slug, lines } => {
@@ -135,6 +139,7 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
     };
 
     let params = MountCreateParams {
+        upstream_lifetime: req.upstream_lifetime,
         slug: req.slug,
         port: req.port.unwrap_or_else(|| state.default_port()),
         path: req.path,
@@ -169,8 +174,12 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
             }
         }
     };
+    if record.upstream_lifetime == crate::config::UpstreamLifetime::Retained {
+        state.retained.register(record.id, false);
+    }
 
     if let Err(error) = state.ensure_listener(record.port).await {
+        state.retained.reset(record.id, true).await;
         let _ = state.mount_registry.remove(&record.slug);
         let _ = state.prune_listeners().await;
         return AdminResponse::Error {
@@ -189,6 +198,7 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
 
         if !probe.ok {
             // Clean up
+            state.retained.reset(record.id, true).await;
             let _ = state.mount_registry.remove(&record.slug);
             let _ = state.prune_listeners().await;
             return AdminResponse::Error {
@@ -209,6 +219,7 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
 
     if tunnel_mode == crate::config::TunnelMode::Quick {
         if let Err(error) = state.ensure_public(record.port).await {
+            state.retained.reset(record.id, true).await;
             let _ = state.mount_registry.remove(&record.slug);
             let _ = state.prune_listeners().await;
             return AdminResponse::Error {
@@ -236,6 +247,7 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
                 "display_name": record.display_name,
                 "status": "ready",
                 "auth_mode": auth_mode.to_string(),
+                "upstream_lifetime": record.upstream_lifetime,
                 "tunnel_mode": tunnel_mode.to_string(),
                 "public_url": public_url,
                 "url": url,
@@ -246,12 +258,38 @@ async fn handle_mount_create(state: &Arc<AppState>, req: MountCreateRequest) -> 
     }
 }
 
+async fn handle_mount_reset(state: &Arc<AppState>, slug: &str) -> AdminResponse {
+    let _registration = state.registration.lock().await;
+    let mount = match state.mount_registry.get(slug) {
+        Ok(Some(mount)) => mount,
+        _ => {
+            return AdminResponse::Error {
+                message: format!("mount '{slug}' not found"),
+                code: crate::error::exit_codes::MOUNT_NOT_FOUND,
+            }
+        }
+    };
+    if mount.upstream_lifetime != crate::config::UpstreamLifetime::Retained {
+        return AdminResponse::Error {
+            message: "mount does not use --keep-alive".into(),
+            code: 2,
+        };
+    }
+    state.retained.reset(mount.id, false).await;
+    AdminResponse::Ok {
+        data: serde_json::json!({"slug":slug,"reset":true,"upstream_lifetime":"retained","retained":state.retained.summary(mount.id)}),
+    }
+}
+
 async fn handle_mount_delete(state: &Arc<AppState>, slug: &str) -> AdminResponse {
     let _registration = state.registration.lock().await;
     if let Some(ct) = state.mount_cancellation.write().await.remove(slug) {
         ct.cancel();
     }
     state.mount_permits.write().await.remove(slug);
+    if let Ok(Some(mount)) = state.mount_registry.get(slug) {
+        state.retained.reset(mount.id, true).await;
+    }
     // Remove sessions
     let removed = state.session_manager.remove_mount_sessions(slug).await;
 
@@ -314,6 +352,7 @@ async fn handle_mount_list(state: &Arc<AppState>) -> AdminResponse {
                 "status": m.status.to_string(),
                 "tunnel": m.tunnel_mode.to_string(),
                 "auth": m.auth_mode.to_string(),
+                "upstream_lifetime": m.upstream_lifetime,
                 "sessions": sessions,
                 "tools": tools,
                 "url": url,
@@ -361,6 +400,8 @@ async fn handle_mount_inspect(state: &Arc<AppState>, slug: &str) -> AdminRespons
             "public_url": if mount.tunnel_mode == crate::config::TunnelMode::Quick { public_url.clone() } else { None },
             "local_url": state.local_url(slug),
             "active_sessions": sessions,
+            "upstream_lifetime": mount.upstream_lifetime,
+            "retained": state.retained.summary(mount.id),
             "created_at": mount.created_at.to_rfc3339(),
             "last_probe": mount.last_probe_result,
             "policy": mount.policy,
@@ -412,6 +453,7 @@ async fn handle_daemon_status(state: &Arc<AppState>) -> AdminResponse {
     AdminResponse::Ok {
         data: serde_json::json!({
             "instance_id": state.daemon_instance_id,
+            "capabilities": ["modern_upstream_retention_v1"],
             "bind": state.config.daemon.bind,
             "mounts": mounts.len(),
             "listeners": listeners,
@@ -500,21 +542,34 @@ async fn handle_doctor_run(state: &Arc<AppState>, slug: Option<&str>) -> AdminRe
                     .cloned()
                     .unwrap_or_default(),
             );
-            let live = tokio::time::timeout(
-                std::time::Duration::from_secs(45),
-                crate::upstream::probe::probe_upstream(
-                    &mount.command,
-                    mount.cwd.as_deref(),
-                    &mount.env_vars,
-                ),
-            )
-            .await;
-            match live {
+            if mount.upstream_lifetime == crate::config::UpstreamLifetime::Retained {
+                let retained = state.retained.summary(mount.id);
+                let lost = retained["needs_reset"] == true
+                    || retained["states"].as_array().is_some_and(|states| {
+                        states.iter().any(|s| {
+                            s["status"] == "lost"
+                                || s["status"] == "closing"
+                                || s["status"] == "startup_failed"
+                        })
+                    });
+                checks.push(serde_json::json!({"check":"retained_upstream","status":if lost {"WARN"} else {"PASS"},"detail":"Retained runtime and cached probe only; no duplicate stdio process was started. Lost state requires mcptunnel reset.","retained":retained}));
+            } else {
+                let live = tokio::time::timeout(
+                    std::time::Duration::from_secs(45),
+                    crate::upstream::probe::probe_upstream(
+                        &mount.command,
+                        mount.cwd.as_deref(),
+                        &mount.env_vars,
+                    ),
+                )
+                .await;
+                match live {
                 Ok(probe) => {
                     checks.push(serde_json::json!({"check":"upstream_live","status":if probe.ok {"PASS"} else {"FAIL"},"detail":if probe.ok {"fresh stdio lifecycle/list probe succeeded"} else {probe.error.as_deref().unwrap_or("stdio probe failed; check executable path, cwd/env and clean JSON stdout")} }));
                     let _ = state.mount_registry.set_probe_result(slug,&probe);
                 }
                 Err(_) => checks.push(serde_json::json!({"check":"upstream_live","status":"FAIL","detail":"stdio probe exceeded 45s; check startup, stdout protocol and advertised list methods"})),
+            }
             }
             let logs = state.get_logs(slug, 8).await;
             if logs

@@ -126,7 +126,39 @@ Cloudflare documents Quick Tunnels as development-only and without SSE. URLs cha
 | Quick Tunnel | Synchronous JSON only; progress suppressed; temporary random origin |
 | Independently hosted local mode | JSON and request-scoped progress SSE; proxy must support streaming |
 
-Modern operations spawn an isolated stdio process per request. Legacy sessions reuse one process each. Modern requests do not preserve upstream in-memory state across calls: conversation history, counters and cached session data restart each time. This isolates principals but makes stateful tools such as Sequential Thinking unsuitable for modern clients that expect continuity. Disk-backed data can persist, as in the read-only Filesystem quick start. Legacy initialized sessions preserve one child's in-memory state only until that session expires, is deleted, crashes or the daemon stops. Each modern operation also pays process startup cost. Upstream processes run with the operator's permissions; the gateway is not an OS sandbox. Process groups/jobs terminate descendants during cleanup.
+By default, modern operations spawn a separate stdio process per request. Opt-in `--keep-alive` in the 0.4.0 source candidate changes this lifetime for authenticated mounts, as described below. Legacy sessions reuse one process each. Default modern requests do not preserve upstream in-memory state across calls: conversation history, counters and cached session data restart each time. This isolates principals but makes stateful tools such as Sequential Thinking unsuitable for modern clients that expect continuity. Disk-backed data can persist, as in the read-only Filesystem quick start. Legacy initialized sessions preserve one child's in-memory state only until that session expires, is deleted, crashes or the daemon stops. Each modern operation also pays process startup cost. Upstream processes run with the operator's permissions; the gateway is not an OS sandbox. Process groups/jobs terminate descendants during cleanup.
+
+### Keep upstream state (0.4.0 source candidate)
+
+This is a local source candidate, not a published binary release. Build with `cargo build` and use `./target/debug/mcptunnel` in place of `mcptunnel` in the examples below. Add `--keep-alive` before `--` when creating a Basic- or external-OAuth-authenticated mount. Old mounts and omitted configuration remain `request` lifetime; legacy initialized sessions are unaffected.
+
+```sh
+mcptunnel --keep-alive --path /browser -- npx -y @playwright/mcp@0.0.84 --browser chrome --headless --isolated
+mcptunnel inspect <mount> --json
+mcptunnel reset <mount> --json
+```
+
+The existing client URL and Authorization configuration are sufficient. Modern requests remain independent HTTP exchanges: no new initialize handshake, `Mcp-Session-Id`, modern DELETE or automatic downgrade is introduced.
+
+| Boundary | Behavior |
+|---|---|
+| Workspace | Immutable mount ID. Create a separate mount/path for independent workflows. |
+| Basic | All holders of the mount credentials share one retained context, including different clients. |
+| OAuth | Exact validated issuer + subject + canonical granted scope set. Token refresh with the same identity/scopes retains state; different scopes do not inherit it. Auth and per-tool scopes are checked for every call. |
+| Public/inherit auth | Retention is rejected. `--public` is a separate tunnel option and works with authenticated retention. |
+| Concurrency | One forwarded operation per context; a concurrent request receives HTTP 429. Other contexts can run independently. |
+| Resource bound | Retained contexts and legacy sessions share the configured per-mount limit (default 8) and global limit (256). Lost contexts occupy a slot until reset. |
+| Idle/hard lifetime | Existing `defaults.session_idle_ttl` (15m) and `session_hard_ttl` (12h) apply. Active calls are protected from idle expiry, but not the hard deadline. |
+| State loss | Expiry, crash, malformed/disconnected transport or uncertain cancellation/timeout closes the owned process. JSON-RPC error `-32030` includes a sanitized reason and reset command. No tool call is replayed. Ordinary tool/MCP errors retain the process. |
+| Reset | Local permission-restricted admin IPC only. Clears every retained owner on the named mount, keeping its URL, credentials and legacy sessions. The next valid operation starts fresh. |
+| Daemon restart | Restored retained mounts report `daemon_restarted` and require `mcptunnel reset <mount>` once. Old browser state cannot be recovered. |
+| Diagnostics | `inspect`/`doctor` expose counts, generation and sanitized status/loss reason. Doctor does not start a second copy of a retained server or reset it. |
+
+Retained state stays only in daemon memory. Separate upstream processes do not isolate filesystem data or browser profiles that the upstream deliberately shares. Use the browser server's isolated profile/context option (`--isolated` in the example) and separate mounts where needed; mcptunnel remains outside the role of an OS sandbox.
+
+The CLI preflights daemon capability `modern_upstream_retention_v1` before creating a retained mount or resetting one. An older daemon is rejected with an explicit update/restart instruction; the CLI never automatically restarts an existing daemon. Creation also echoes `upstream_lifetime: retained`. Missing DB/JSON/IPC fields default to `request`; unknown stored lifetime values fail closed.
+
+One local wire check of the actual browser server is recorded in [0.4.0 candidate notes](releases/v0.4.0.md). It is not account-backed AI-client, external OAuth, public Quick Tunnel, cross-platform or full optional-conformance evidence.
 
 Limits: 1 MiB HTTP body, 10-second body timeout, 4 MiB stdio message, 15-second startup, 60-second request, 64 global requests, default 8 requests per mount/session, default 8 sessions per mount, and 256 sessions globally. Discovery is bounded to 4,096 entries, 64 pages and 16 MiB per catalog. Request timeout and SSE disconnect cancellation are verified. Reinitialize a legacy session after its upstream crashes.
 

@@ -67,7 +67,26 @@ In PowerShell, replace the `printf` line with `Set-Content mcptunnel-demo/hello.
 
 The package version is deliberately pinned to the recorded verified example. npm marks this date-based release deprecated because the package moved to semantic versions; this is not a recommendation to install an untested `latest`. The historical Node 22 verification and current local check are described in the [engineering report](docs/ENGINEERING_REPORT.md#pre-public-documentation-check--2026-10-22).
 
-**Stateful-server limit:** modern (`2026-07-28`) requests start a fresh upstream process for every operation. In-memory conversation/history state does **not** survive between calls. Sequential Thinking is therefore unsuitable as this quick start. Legacy clients using a supported initialized session reuse one process until that session ends. [Protocol and state limits](docs/USER_GUIDE.md#protocol-and-limits).
+**Stateful servers:** by default, modern (`2026-07-28`) requests start a fresh upstream process per operation. The **0.4.0 source candidate** adds opt-in `--keep-alive` for authenticated browser or other in-memory workflows; published 0.3.7 downloads do not include it. Legacy initialized sessions continue to reuse one process. [Process lifetime and reset](docs/USER_GUIDE.md#keep-upstream-state-040-source-candidate).
+
+## Keep browser state (0.4.0 source candidate)
+
+Run `cargo build` for this source candidate, then wrap a browser server with `--keep-alive`:
+
+```sh
+./target/debug/mcptunnel --keep-alive --path /browser -- npx -y @playwright/mcp@0.0.84 --browser chrome --headless --isolated
+```
+
+Use the printed HTTP URL and Basic header. Separate calls can use the same open page. One mount plus one authenticated owner/permission set shares a process; use separate mounts for independent workflows. The upstream still controls its own profile/storage isolation.
+
+State expires after 15 idle minutes or 12 hours total by default. A crash, uncertain cancelled call or daemon restart requires an explicit reset; calls are never automatically replayed:
+
+```sh
+./target/debug/mcptunnel inspect <mount>
+./target/debug/mcptunnel reset <mount>  # resets retained state for every owner of this mount
+```
+
+Reset keeps the URL and credentials and leaves legacy sessions unchanged. Anonymous/inherit auth cannot use keep-alive. `--public` can still add temporary HTTPS to an authenticated mount. This feature adds process continuity; optional interactive MCP features and Quick Tunnel SSE remain unsupported. [Full lifecycle contract](docs/USER_GUIDE.md#keep-upstream-state-040-source-candidate).
 
 ## Connect your client
 

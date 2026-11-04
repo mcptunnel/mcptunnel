@@ -44,6 +44,23 @@ pub struct DefaultsConfig {
     pub cidr_filter_mode: String,
 }
 
+/// Lifetime of a modern request's upstream process; legacy sessions are unchanged.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpstreamLifetime {
+    #[default]
+    Request,
+    Retained,
+}
+impl std::fmt::Display for UpstreamLifetime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Request => "request",
+            Self::Retained => "retained",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TunnelMode {

@@ -9,6 +9,8 @@ use crate::policy::types::PolicyConfig;
 /// A mount record representing a registered MCP server endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MountRecord {
+    #[serde(default)]
+    pub upstream_lifetime: crate::config::UpstreamLifetime,
     pub id: Uuid,
     pub slug: String,
     pub port: u16,
@@ -94,6 +96,7 @@ pub struct ProbeResult {
 /// Parameters for creating a new mount.
 #[derive(Debug, Clone)]
 pub struct MountCreateParams {
+    pub upstream_lifetime: crate::config::UpstreamLifetime,
     pub slug: Option<String>,
     pub port: u16,
     pub path: Option<String>,

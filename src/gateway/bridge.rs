@@ -7,9 +7,10 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
 use std::{borrow::Cow, sync::Arc};
 
-/// Each SDK dispatch gets a fresh handler. Only explicit legacy sessions reuse a child.
+/// Each SDK dispatch gets a fresh handler; retained mounts and legacy sessions own children separately.
 pub struct Bridge {
     pub state: Arc<AppState>,
+    pub retained_lease: Option<Arc<crate::upstream::retained::RetainedLease>>,
     pub mount: MountRecord,
     pub legacy_cancellation: Option<tokio_util::sync::CancellationToken>,
 }
@@ -37,7 +38,18 @@ impl Bridge {
         } else {
             None
         };
-        let mut value = if modern {
+        let mut value = if modern
+            && self.mount.upstream_lifetime == crate::config::UpstreamLifetime::Retained
+        {
+            // A retained mount must never silently fall back to a fresh process.
+            self.retained_lease
+                .as_ref()
+                .ok_or_else(|| {
+                    ErrorData::internal_error("retained context was not admitted", None)
+                })?
+                .request(method, params, context, sink)
+                .await?
+        } else if modern {
             let child = UpstreamChild::spawn(
                 &self.mount.command,
                 self.mount.cwd.as_deref(),

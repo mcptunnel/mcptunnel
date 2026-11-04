@@ -212,6 +212,7 @@ pub async fn run_daemon(config: Config) -> crate::error::Result<()> {
             let _ = task.await;
         }
     }
+    state.retained.shutdown().await;
     state.stop_listeners().await;
     let children = std::mem::take(&mut *state.upstream_children.write().await);
     for (_, child) in children {

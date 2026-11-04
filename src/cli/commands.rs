@@ -39,6 +39,7 @@ pub async fn execute(cli: Cli) -> i32 {
         Commands::Run(args) => handle_run(&config, *args).await,
         Commands::List { json } => handle_list(&config, json).await,
         Commands::Inspect { slug, json } => handle_inspect(&config, &slug, json).await,
+        Commands::Reset { slug, json } => handle_reset(&config, &slug, json),
         Commands::Logs { slug, follow } => handle_logs(&config, &slug, follow).await,
         Commands::Stop { slug, all } => handle_stop(&config, slug.as_deref(), all).await,
         Commands::Doctor { slug, json } => handle_doctor(&config, slug.as_deref(), json).await,
@@ -58,6 +59,23 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
     let (program, cmd_args) = args.command.split_first().unwrap();
     let args = args.options;
     let is_json = args.json;
+    let keep_alive = args.keep_alive;
+    if keep_alive {
+        if matches!(args.auth.as_deref(), Some("public" | "inherit"))
+            || (args.auth.is_none()
+                && !matches!(
+                    config.defaults.auth_mode,
+                    crate::config::AuthModeConfig::Basic | crate::config::AuthModeConfig::OAuth
+                ))
+        {
+            eprintln!("Error: --keep-alive requires Basic or external OAuth authentication");
+            return exit_codes::CLI_USAGE;
+        }
+        if let Err(message) = require_retention(config) {
+            eprintln!("Error: {message}");
+            return exit_codes::DAEMON_UNAVAILABLE;
+        }
+    }
 
     // Parse env vars
     let env_vars: Vec<(String, String)> = args
@@ -70,6 +88,11 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
         .collect();
 
     let request = AdminRequest::MountCreate(Box::new(MountCreateRequest {
+        upstream_lifetime: if keep_alive {
+            crate::config::UpstreamLifetime::Retained
+        } else {
+            crate::config::UpstreamLifetime::Request
+        },
         slug: args.slug,
         port: args.port,
         path: args.path,
@@ -99,6 +122,10 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
 
     match send_admin_request(config, &request) {
         Ok(AdminResponse::Ok { data }) => {
+            if keep_alive && data["mount"]["upstream_lifetime"] != "retained" {
+                eprintln!("Error: daemon did not acknowledge keep-alive; inspect the mount before using it");
+                return exit_codes::DAEMON_UNAVAILABLE;
+            }
             if is_json {
                 println!(
                     "{}",
@@ -125,6 +152,38 @@ async fn handle_run(config: &Config, args: RunArgs) -> i32 {
         }
         Err(e) => {
             eprintln!("Error: {e}");
+            exit_codes::DAEMON_UNAVAILABLE
+        }
+    }
+}
+
+const RETENTION_CAPABILITY: &str = "modern_upstream_retention_v1";
+fn require_retention(config: &Config) -> Result<(), String> {
+    match send_admin_request(config, &AdminRequest::DaemonStatus) {
+        Ok(AdminResponse::Ok { data }) if data["capabilities"].as_array().is_some_and(|a| a.iter().any(|v| v == RETENTION_CAPABILITY)) => Ok(()),
+        _ => Err("daemon does not support keep-alive; update and explicitly restart it (existing state will be lost)".into()),
+    }
+}
+fn handle_reset(config: &Config, slug: &str, json: bool) -> i32 {
+    if let Err(message) = require_retention(config) {
+        eprintln!("Error: {message}");
+        return exit_codes::DAEMON_UNAVAILABLE;
+    }
+    match send_admin_request(config, &AdminRequest::MountReset { slug: slug.into() }) {
+        Ok(AdminResponse::Ok { data }) => {
+            if json {
+                println!("{data}");
+            } else {
+                println!("Reset retained state for all owners of '{slug}'; the next operation starts fresh.");
+            }
+            exit_codes::SUCCESS
+        }
+        Ok(AdminResponse::Error { message, code }) => {
+            eprintln!("Error: {message}");
+            code
+        }
+        Err(error) => {
+            eprintln!("Error: {error}");
             exit_codes::DAEMON_UNAVAILABLE
         }
     }

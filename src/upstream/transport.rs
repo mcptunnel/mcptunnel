@@ -65,6 +65,7 @@ impl<R: AsyncRead + Unpin> AsyncRead for BoundedRead<R> {
     }
 }
 pub struct ChildTransport {
+    pub(crate) closed: tokio_util::sync::CancellationToken,
     child: Option<Box<dyn ChildWrapper>>,
     transport: AsyncRwTransport<RoleClient, BoundedRead<ChildStdout>, ChildStdin>,
     pub(crate) cancellation_sent: Arc<AtomicBool>,
@@ -96,6 +97,7 @@ pub fn spawn(mut command: Command) -> io::Result<ChildTransport> {
         .take()
         .ok_or_else(|| io::Error::other("missing stdin"))?;
     Ok(ChildTransport {
+        closed: tokio_util::sync::CancellationToken::new(),
         child: Some(child),
         transport: AsyncRwTransport::new(BoundedRead::new(stdout), stdin),
         cancellation_sent: Arc::new(AtomicBool::new(false)),
@@ -110,9 +112,14 @@ impl Transport<RoleClient> for ChildTransport {
         self.transport.send(message)
     }
     async fn receive(&mut self) -> Option<RxJsonRpcMessage<RoleClient>> {
-        self.transport.receive().await
+        let message = self.transport.receive().await;
+        if message.is_none() {
+            self.closed.cancel();
+        }
+        message
     }
     async fn close(&mut self) -> io::Result<()> {
+        self.closed.cancel();
         self.transport.close().await?;
         if let Some(mut child) = self.child.take() {
             // Cancellation is a notification with no acknowledgement. Closing stdin
@@ -136,6 +143,7 @@ impl Transport<RoleClient> for ChildTransport {
 }
 impl Drop for ChildTransport {
     fn drop(&mut self) {
+        self.closed.cancel();
         if let Some(mut child) = self.child.take() {
             let _ = child.start_kill();
             // kill() waits/reaps, including when startup or a request future is cancelled.

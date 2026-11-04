@@ -1,3 +1,4 @@
+pub mod budget;
 pub mod types;
 
 use chrono::Utc;
@@ -11,12 +12,14 @@ use types::{generate_session_id, Session, SessionConfig, SessionStatus};
 pub struct SessionManager {
     sessions: Arc<RwLock<HashMap<String, Session>>>,
     config: SessionConfig,
+    pub budget: Arc<budget::ContextBudget>,
 }
 
 impl SessionManager {
     pub fn new(config: SessionConfig) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            budget: budget::ContextBudget::new(config.max_sessions_per_mount),
             config,
         }
     }
@@ -38,9 +41,11 @@ impl SessionManager {
             ));
         }
 
+        let reservation = self.budget.reserve(mount_slug)?;
         let session_id = generate_session_id();
         let now = Utc::now();
         let session = Session {
+            reservation: Some(reservation),
             id: uuid::Uuid::new_v4().to_string(),
             mount_slug: mount_slug.to_string(),
             session_id: session_id.clone(),

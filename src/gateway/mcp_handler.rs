@@ -46,11 +46,11 @@ pub async fn handle_mcp(
     let Ok(_global_permit) = state.request_permits.clone().try_acquire_owned() else {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     };
-    let principal =
-        match crate::gateway::security::authorize(&state, &mount, request.headers()).await {
-            Ok(p) => p,
-            Err(r) => return r,
-        };
+    let owner = match crate::gateway::security::authorize(&state, &mount, request.headers()).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let principal = owner.legacy_principal();
     if request.method() == Method::GET {
         return (
             StatusCode::METHOD_NOT_ALLOWED,
@@ -257,12 +257,68 @@ pub async fn handle_mcp(
             .to_owned()])
         .with_max_request_body_bytes(BODY_LIMIT)
         .with_cancellation_token(mount_ct);
+    // Admission must not touch retained state for policy-denied or hidden operations.
+    let may_forward = match method {
+        "tools/call" => {
+            body["params"]["name"]
+                .as_str()
+                .is_some_and(|name| crate::policy::filter::is_tool_allowed(&mount.policy, name))
+                && body["params"]
+                    .get("requestState")
+                    .is_none_or(Value::is_null)
+                && body["params"]
+                    .get("inputResponses")
+                    .is_none_or(Value::is_null)
+        }
+        "resources/list" | "resources/templates/list" => mount.policy.expose_resources,
+        "resources/read" => body["params"]["uri"]
+            .as_str()
+            .is_some_and(|uri| crate::policy::filter::is_resource_allowed(&mount.policy, uri)),
+        "prompts/list" => mount.policy.expose_prompts,
+        "prompts/get" => body["params"]["name"]
+            .as_str()
+            .is_some_and(|name| crate::policy::filter::is_prompt_allowed(&mount.policy, name)),
+        _ => true,
+    };
+    let retained_lease = if body.get("id").is_some()
+        && may_forward
+        && modern
+        && mount.upstream_lifetime == crate::config::UpstreamLifetime::Retained
+        && matches!(
+            method,
+            "tools/list"
+                | "tools/call"
+                | "resources/list"
+                | "resources/templates/list"
+                | "resources/read"
+                | "prompts/list"
+                | "prompts/get"
+                | "completion/complete"
+        ) {
+        match state.retained.acquire(&mount, &owner) {
+            Ok(lease) => Some(lease),
+            Err(crate::upstream::retained::AcquireError::Busy) => {
+                return StatusCode::TOO_MANY_REQUESTS.into_response()
+            }
+            Err(crate::upstream::retained::AcquireError::State(error)) => {
+                return (
+                    StatusCode::OK,
+                    Json(json!({"jsonrpc":"2.0", "id":id, "error":error})),
+                )
+                    .into_response()
+            }
+        }
+    } else {
+        None
+    };
+    let bridge_lease = retained_lease.clone();
     let bridge_state = state.clone();
     let bridge_mount = mount.clone();
     let service = StreamableHttpService::new(
         move || {
             Ok(Bridge {
                 state: bridge_state.clone(),
+                retained_lease: bridge_lease.clone(),
                 mount: bridge_mount.clone(),
                 legacy_cancellation: legacy_cancellation.clone(),
             })
@@ -356,7 +412,13 @@ pub async fn handle_mcp(
     let stream = futures::stream::unfold(
         (
             body.into_data_stream(),
-            (_global_permit, _mount_permit, _session_permit, reservation),
+            (
+                _global_permit,
+                _mount_permit,
+                _session_permit,
+                reservation,
+                retained_lease,
+            ),
         ),
         |(mut stream, guards)| async move { stream.next().await.map(|chunk| (chunk, (stream, guards))) },
     );

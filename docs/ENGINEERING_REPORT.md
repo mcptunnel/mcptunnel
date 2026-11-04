@@ -153,3 +153,10 @@ The authoritative workboard is [td#596](https://tdtd.dev/596). Historical broad 
 | Future — revenue | Trusted managed hostname provisioning, billing/plans/operational entitlement lifecycle | td#611–td#612 |
 
 No claim is made for JSON-response abort coverage, external browser OAuth, live reconnect, every client or every platform at the current source revision. Full conformance still has unsupported-feature failures. The published scope remains synchronous stdio-to-HTTP operations with the documented limits.
+
+
+## Retained upstream source candidate — 2026-11-03
+
+Version 0.4.0 adds opt-in authenticated modern process continuity. [Candidate notes](releases/v0.4.0.md) distinguish local checks and the one actual browser wire flow from publication or additional client/platform evidence. Run `scripts/verify-keep-alive.mjs` with an external output path to reproduce the browser flow; generated state, profiles, logs and reports stay outside the repository.
+
+The focused fixtures verify state continuity/default isolation, OAuth ownership/scope separation, explicit state loss/reset and bounded process cleanup. Existing legacy-session and default-stateless behavior is retained. The candidate has not run GitHub Actions, official full conformance, public tunneling or additional native targets. It remains unpublished.

@@ -5,6 +5,8 @@ use std::time::Duration;
 /// A remote MCP session backed by a child process.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
+    #[serde(skip)]
+    pub reservation: Option<std::sync::Arc<super::budget::Reservation>>,
     pub id: String,
     pub mount_slug: String,
     pub session_id: String,

@@ -349,6 +349,15 @@ mod tests {
 
     #[tokio::test]
     async fn oauth_http_resource_metadata_scopes_expiry_and_session_subject() {
+        oauth_http_fixture(false).await;
+    }
+
+    #[tokio::test]
+    async fn modern_keep_alive_oauth_scopes_and_legacy_subjects() {
+        oauth_http_fixture(true).await;
+    }
+
+    async fn oauth_http_fixture(keep_alive: bool) {
         use crate::{
             config::{AuthModeConfig, Config, TunnelMode},
             daemon::state::AppState,
@@ -373,6 +382,11 @@ mod tests {
         let registry = MountRegistry::new(Arc::new(StdMutex::new(conn)));
         registry
             .create(MountCreateParams {
+                upstream_lifetime: if keep_alive {
+                    crate::config::UpstreamLifetime::Retained
+                } else {
+                    crate::config::UpstreamLifetime::Request
+                },
                 port: listener.local_addr().unwrap().port(),
                 path: Some("/oauth/mcp".into()),
                 slug: Some("oauth".into()),
@@ -403,6 +417,16 @@ mod tests {
             })
             .unwrap();
         let state = Arc::new(AppState::new(config, registry, SessionConfig::default()));
+        if keep_alive {
+            let mount = state.mount_registry.get("oauth").unwrap().unwrap();
+            state.retained.reset(mount.id, false).await;
+            let probe = crate::upstream::probe::probe_upstream(&mount.command, None, &[]).await;
+            assert!(probe.ok);
+            state
+                .mount_registry
+                .set_probe_result("oauth", &probe)
+                .unwrap();
+        }
         let rsa = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 2048).unwrap();
         let encoding = jsonwebtoken::EncodingKey::from_rsa_pem(
             rsa.to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
@@ -525,6 +549,32 @@ mod tests {
             403
         );
         crate::gateway::mcp_handler::close_session(&state, &sid).await;
+        if keep_alive {
+            let counter = serde_json::json!({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"counter","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"keep-alive","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}});
+            for (subject, scope, expected) in [
+                ("alice", "read write", 1),
+                ("alice", "write read", 2),
+                ("bob", "read write", 1),
+                ("alice", "read", 1),
+                ("alice", "read write", 3),
+            ] {
+                let response = send(counter.clone(), sign(subject, scope, &resource, now + 120))
+                    .header("mcp-protocol-version", "2026-07-28")
+                    .header("mcp-method", "tools/call")
+                    .header("mcp-name", "counter")
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), 200);
+                assert!(!response.headers().contains_key("mcp-session-id"));
+                let body: serde_json::Value = response.json().await.unwrap();
+                assert_eq!(
+                    body["result"]["structuredContent"]["value"], expected,
+                    "{body}"
+                );
+            }
+            state.retained.shutdown().await;
+        }
         ct.cancel();
         task.await.unwrap().unwrap();
     }

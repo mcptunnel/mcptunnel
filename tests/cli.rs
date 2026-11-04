@@ -150,3 +150,41 @@ fn portable_daemon_ipc_and_fail_closed_configuration() {
         .status
         .success());
 }
+
+#[cfg(unix)]
+#[test]
+fn keep_alive_old_daemon_refuses_before_creation() {
+    use std::{
+        io::{BufRead, BufReader, Write},
+        os::unix::net::UnixListener,
+    };
+    let temp = tempfile::tempdir().unwrap();
+    let config = temp.path().join("config.toml");
+    let state = temp.path().join("state");
+    std::fs::create_dir(&state).unwrap();
+    std::fs::write(&config, "[daemon]\nauto_start=false\n").unwrap();
+    let listener = UnixListener::bind(state.join("daemon.sock")).unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        let mut request = String::new();
+        BufReader::new(socket.try_clone().unwrap())
+            .read_line(&mut request)
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&request).unwrap()["method"],
+            "DaemonStatus"
+        );
+        socket
+            .write_all(b"{\"status\":\"ok\",\"data\":{\"instance_id\":\"old-daemon\"}}\n")
+            .unwrap();
+    });
+    let output = Command::new(env!("CARGO_BIN_EXE_mcptunnel"))
+        .env("MCPTUNNEL_CONFIG", config)
+        .env("MCPTUNNEL_STATE_DIR", state)
+        .args(["--keep-alive", "--", "node", "unused.cjs"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("explicitly restart"));
+    server.join().unwrap();
+}

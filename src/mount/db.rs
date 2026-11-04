@@ -81,6 +81,14 @@ pub fn init_db_at_port(conn: &Connection, legacy_port: u16) -> SqlResult<()> {
     if conn.prepare("SELECT path FROM mounts LIMIT 0").is_err() {
         conn.execute_batch("ALTER TABLE mounts ADD COLUMN path TEXT NOT NULL DEFAULT ''; UPDATE mounts SET path = '/' || slug || '/mcp';")?;
     }
+    if conn
+        .prepare("SELECT upstream_lifetime FROM mounts LIMIT 0")
+        .is_err()
+    {
+        conn.execute_batch(
+            "ALTER TABLE mounts ADD COLUMN upstream_lifetime TEXT NOT NULL DEFAULT 'request';",
+        )?;
+    }
     conn.execute_batch(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_mount_endpoint ON mounts(port, path);",
     )?;
@@ -90,8 +98,8 @@ pub fn init_db_at_port(conn: &Connection, legacy_port: u16) -> SqlResult<()> {
 /// Insert a mount record.
 pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
     conn.execute(
-        "INSERT INTO mounts (id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+        "INSERT INTO mounts (id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path, upstream_lifetime)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
         params![
             record.id.to_string(),
             record.slug,
@@ -112,6 +120,7 @@ pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
             record.basic_credentials.as_ref().map(|c| serde_json::to_string(c).unwrap_or_default()),
             record.port,
             record.path,
+            record.upstream_lifetime.to_string(),
         ],
     )?;
     Ok(())
@@ -120,13 +129,12 @@ pub fn insert_mount(conn: &Connection, record: &MountRecord) -> SqlResult<()> {
 /// List all mounts.
 pub fn list_mounts(conn: &Connection) -> SqlResult<Vec<MountRecord>> {
     let mut stmt = conn.prepare(
-        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path FROM mounts"
+        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path, upstream_lifetime FROM mounts"
     )?;
 
     let records = stmt
-        .query_map([], |row| Ok(row_to_mount(row)))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .query_map([], row_to_mount)?
+        .collect::<SqlResult<Vec<_>>>()?;
 
     Ok(records)
 }
@@ -134,12 +142,12 @@ pub fn list_mounts(conn: &Connection) -> SqlResult<Vec<MountRecord>> {
 /// Get a mount by slug.
 pub fn get_mount_by_slug(conn: &Connection, slug: &str) -> SqlResult<Option<MountRecord>> {
     let mut stmt = conn.prepare(
-        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path FROM mounts WHERE slug = ?1"
+        "SELECT id, slug, display_name, command_json, cwd, auth_mode, oauth_config_json, policy_json, tunnel_mode, hostname, status, created_at, updated_at, last_probe_at, last_probe_json, env_vars_json, basic_credentials_json, port, path, upstream_lifetime FROM mounts WHERE slug = ?1"
     )?;
 
-    let mut rows = stmt.query_map(params![slug], |row| Ok(row_to_mount(row)))?;
+    let mut rows = stmt.query_map(params![slug], row_to_mount)?;
 
-    Ok(rows.next().and_then(|r| r.ok()))
+    rows.next().transpose()
 }
 
 /// Delete a mount by slug.
@@ -193,7 +201,13 @@ pub fn endpoint_exists(conn: &Connection, port: u16, path: &str) -> SqlResult<bo
     )
 }
 
-fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
+fn row_to_mount(row: &rusqlite::Row) -> SqlResult<MountRecord> {
+    let lifetime: String = row.get(19)?;
+    let upstream_lifetime = match lifetime.as_str() {
+        "request" => crate::config::UpstreamLifetime::Request,
+        "retained" => crate::config::UpstreamLifetime::Retained,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+    };
     let id_str: String = row.get(0).unwrap_or_default();
     let command_json: String = row.get(3).unwrap_or_default();
     let oauth_json: Option<String> = row.get(6).ok().unwrap_or(None);
@@ -209,7 +223,8 @@ fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
     let updated_str: String = row.get(12).unwrap_or_default();
     let probe_at_str: Option<String> = row.get(13).ok().unwrap_or(None);
 
-    MountRecord {
+    Ok(MountRecord {
+        upstream_lifetime,
         id: uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::new_v4()),
         slug: row.get(1).unwrap_or_default(),
         port: row.get(17).unwrap_or(8000),
@@ -255,7 +270,7 @@ fn row_to_mount(row: &rusqlite::Row) -> MountRecord {
         }),
         last_probe_result: probe_json.and_then(|j| serde_json::from_str(&j).ok()),
         env_vars: serde_json::from_str(&env_json).unwrap_or_default(),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -272,6 +287,7 @@ mod tests {
 
     fn make_record(slug: &str) -> MountRecord {
         MountRecord {
+            upstream_lifetime: crate::config::UpstreamLifetime::Request,
             id: uuid::Uuid::new_v4(),
             slug: slug.to_string(),
             port: 8000,
@@ -295,6 +311,35 @@ mod tests {
             last_probe_result: None,
             env_vars: vec![],
         }
+    }
+
+    #[test]
+    fn keep_alive_migration_defaults_off_and_rejects_invalid() {
+        let conn = test_db();
+        insert_mount(&conn, &make_record("old")).unwrap();
+        conn.execute_batch("ALTER TABLE mounts DROP COLUMN upstream_lifetime;")
+            .unwrap();
+        init_db(&conn).unwrap();
+        assert_eq!(
+            get_mount_by_slug(&conn, "old")
+                .unwrap()
+                .unwrap()
+                .upstream_lifetime,
+            crate::config::UpstreamLifetime::Request
+        );
+        conn.execute("UPDATE mounts SET upstream_lifetime='retained'", [])
+            .unwrap();
+        assert_eq!(
+            get_mount_by_slug(&conn, "old")
+                .unwrap()
+                .unwrap()
+                .upstream_lifetime,
+            crate::config::UpstreamLifetime::Retained
+        );
+        conn.execute("UPDATE mounts SET upstream_lifetime='invalid'", [])
+            .unwrap();
+        assert!(get_mount_by_slug(&conn, "old").is_err());
+        assert!(list_mounts(&conn).is_err());
     }
 
     #[test]
