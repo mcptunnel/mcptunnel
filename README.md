@@ -14,6 +14,10 @@
   <a href="docs/USER_GUIDE.md">Documentation</a>
 </p>
 
+<p align="center">
+  <img src="assets/mcptunnel-overview.svg" alt="mcptunnel connects a local stdio MCP server to an AI client over authenticated Streamable HTTP: localhost by default, or temporary public HTTPS with --public." width="1280" />
+</p>
+
 Run an existing MCP server on **localhost**, or add **`--public`** for a temporary Cloudflare HTTPS URL. mcptunnel bridges stdio to Streamable HTTP and keeps your servers running in the background.
 
 - **One command to start.** The daemon starts automatically.

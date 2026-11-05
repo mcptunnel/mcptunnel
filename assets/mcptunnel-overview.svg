@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="696" viewBox="0 0 1280 696" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">Your local MCP server, reachable over HTTP</title>
+  <desc id="description">mcptunnel bridges a local stdio MCP server to an AI client over Streamable HTTP. Connect on localhost by default, or add --public for a temporary Cloudflare HTTPS URL. Basic authentication is enabled by default.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1280" y2="696" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1324"/>
+      <stop offset="1" stop-color="#101F35"/>
+    </linearGradient>
+    <linearGradient id="gateway" x1="482" y1="280" x2="798" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#172E50"/>
+      <stop offset="1" stop-color="#12253C"/>
+    </linearGradient>
+    <linearGradient id="portal" x1="615" y1="304" x2="665" y2="354" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7AA7FF"/>
+      <stop offset="1" stop-color="#3669F6"/>
+    </linearGradient>
+    <marker id="blue-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1L5 5L1 9" stroke="#7AA7FF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="mint-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M1 1L5 5L1 9" stroke="#80E6D9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="696" rx="24" fill="url(#background)"/>
+  <rect x="0.5" y="0.5" width="1279" height="695" rx="23.5" stroke="#26364D"/>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="56" y="65" fill="#91A8C5" font-size="15" font-weight="600" letter-spacing="2.5">STDIO IN. HTTP OUT.</text>
+    <text x="56" y="128" fill="#F3F7FF" font-size="52" font-weight="700" letter-spacing="-1.5">Your local MCP server.</text>
+    <text x="56" y="191" fill="#8CB5FF" font-size="52" font-weight="700" letter-spacing="-1.5">One HTTP endpoint.</text>
+    <text x="56" y="236" fill="#AFBED2" font-size="21">Connect your AI client to tools running on your machine.</text>
+
+    <rect x="921" y="50" width="303" height="42" rx="21" fill="#152D36" stroke="#31505A"/>
+    <g stroke="#80E6D9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="940" y="67" width="13" height="11" rx="2"/>
+      <path d="M943 67V64A3.5 3.5 0 0 1 950 64V67"/>
+    </g>
+    <text x="967" y="77" fill="#A3E8DE" font-size="16" font-weight="500">Basic auth by default</text>
+
+    <!-- A local server, the gateway, and an HTTP-capable client. -->
+    <rect x="56" y="280" width="280" height="184" rx="16" fill="#101D30" stroke="#34465F"/>
+    <g stroke="#A4B9D7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="84" y="307" width="48" height="38" rx="6"/>
+      <path d="M95 319L102 325L95 331M109 331H121"/>
+    </g>
+    <text x="84" y="387" fill="#F3F7FF" font-size="25" font-weight="600" letter-spacing="-0.4">Your MCP server</text>
+    <text x="84" y="423" fill="#A8BAD2" font-size="17">Files · browser · your tools</text>
+
+    <path d="M352 372H466" stroke="#7AA7FF" stroke-width="2.5" marker-start="url(#blue-arrow)" marker-end="url(#blue-arrow)"/>
+    <text x="409" y="351" fill="#A9C6FF" font-size="19" font-weight="500" text-anchor="middle">stdio</text>
+
+    <rect x="482" y="280" width="316" height="184" rx="16" fill="url(#gateway)" stroke="#608BD4" stroke-width="1.5"/>
+    <path d="M620 345V322C620 310 629 302 640 302C651 302 660 310 660 322V345" stroke="url(#portal)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M632 345V324C632 319 635 315 640 315C645 315 648 319 648 324V345" stroke="#80E6D9" stroke-width="7" stroke-linecap="round"/>
+    <text x="640" y="389" fill="#F3F7FF" font-size="31" font-weight="700" letter-spacing="-0.8" text-anchor="middle">mcptunnel</text>
+    <text x="640" y="423" fill="#B5CAE5" font-size="18" text-anchor="middle">Runs in the background</text>
+
+    <path d="M814 372H928" stroke="#80E6D9" stroke-width="2.5" marker-start="url(#mint-arrow)" marker-end="url(#mint-arrow)"/>
+    <text x="871" y="327" fill="#A3E8DE" font-size="17" font-weight="500" text-anchor="middle">Streamable</text>
+    <text x="871" y="351" fill="#A3E8DE" font-size="19" font-weight="500" text-anchor="middle">HTTP</text>
+
+    <rect x="944" y="280" width="280" height="184" rx="16" fill="#101D30" stroke="#34465F"/>
+    <g stroke="#A4B9D7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M978 308H1014A6 6 0 0 1 1020 314V334A6 6 0 0 1 1014 340H993L979 348V340H978A6 6 0 0 1 972 334V314A6 6 0 0 1 978 308Z"/>
+      <path d="M983 324H1009M983 317H999"/>
+    </g>
+    <text x="972" y="387" fill="#F3F7FF" font-size="25" font-weight="600" letter-spacing="-0.4">Your AI client</text>
+    <text x="972" y="423" fill="#A8BAD2" font-size="17">Connect with an HTTP URL</text>
+
+    <!-- Both endpoint choices retain authentication. -->
+    <text x="56" y="514" fill="#91A8C5" font-size="14" font-weight="600" letter-spacing="2">TWO WAYS TO CONNECT</text>
+    <rect x="56" y="536" width="570" height="108" rx="12" fill="#142238" stroke="#2B405D"/>
+    <circle cx="82" cy="565" r="4" fill="#8CB5FF"/>
+    <text x="96" y="571" fill="#B7CEEF" font-size="15" font-weight="600" letter-spacing="0.7">LOCALHOST · DEFAULT</text>
+    <text x="80" y="615" fill="#E5EDFA" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', monospace" font-size="22">http://localhost:8000/filesystem</text>
+
+    <rect x="646" y="536" width="578" height="108" rx="12" fill="#122B32" stroke="#2B4B50"/>
+    <circle cx="672" cy="565" r="4" fill="#80E6D9"/>
+    <text x="686" y="571" fill="#A3E8DE" font-size="15" font-weight="600" letter-spacing="0.7">PUBLIC HTTPS · ADD</text>
+    <text x="884" y="571" fill="#A3E8DE" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', monospace" font-size="16" font-weight="600">--public</text>
+    <text x="670" y="615" fill="#E0F3EF" font-size="23">Temporary Cloudflare URL</text>
+  </g>
+</svg>
