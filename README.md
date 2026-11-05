@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="#why-do-you-need-this">Why mcptunnel?</a> ·
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/USER_GUIDE.md">Documentation</a>
@@ -17,6 +18,21 @@
 <p align="center">
   <img src="assets/mcptunnel-overview.svg" alt="mcptunnel connects a local stdio MCP server to an AI client over authenticated Streamable HTTP: localhost by default, or temporary public HTTPS with --public." width="1280" />
 </p>
+
+## Why do you need this?
+
+You want an AI assistant on the web to **read a folder on your laptop** or **find an answer in your company wiki**. But the files are on your computer, and the wiki only opens when you are connected to the work VPN. The assistant cannot reach either just because you can.
+
+MCP servers give AI assistants tools for jobs like these. Many run as local programs, so a remote assistant cannot connect to them directly. **mcptunnel gives those local tools an HTTP address.** The assistant sends a request to that address, the tool runs on your machine, and its results go back to the assistant.
+
+- **An online assistant, your local files.** Run a filesystem MCP server with access to a folder you choose. Add `--public` to get a temporary HTTPS URL for a compatible remote AI client.
+- **An external assistant, your company's VPN.** Run an MCP server for your internal wiki or service on your VPN-connected work machine. That server accesses the company tools from there; mcptunnel carries the requests and results between it and the assistant.
+
+For the VPN example, your work machine must stay online and connected to the VPN, and its network must allow the outbound Cloudflare tunnel. Use tools and data your organization permits the external AI service to access.
+
+**Where the tools run matters.** If your desktop AI app runs tools on your computer, localhost is enough—even when the model itself is online. Use public HTTPS when the tool-calling client is remote. Your AI client needs [remote MCP support and compatible authentication](docs/CLIENT_COMPATIBILITY.md#copypaste-connection-configurations).
+
+## How it works
 
 Run an existing MCP server on **localhost**, or add **`--public`** for a temporary Cloudflare HTTPS URL. mcptunnel bridges stdio to Streamable HTTP and keeps your servers running in the background.
 
