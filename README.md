@@ -9,37 +9,55 @@
 </p>
 
 <p align="center">
-  <a href="#why-do-you-need-this">Why mcptunnel?</a> ·
+  <a href="#run">Run</a> ·
   <a href="#install">Install</a> ·
-  <a href="#quick-start">Quick start</a> ·
+  <a href="#connect-your-client">Connect your client</a> ·
   <a href="docs/USER_GUIDE.md">Documentation</a>
 </p>
 
-<p align="center">
-  <img src="assets/mcptunnel-overview.svg" alt="mcptunnel connects a local stdio MCP server to an AI client over authenticated Streamable HTTP: localhost by default, or temporary public HTTPS with --public." width="1280" />
-</p>
+<a id="quick-start"></a>
 
-## Why do you need this?
+## Run
 
-You want an AI assistant on the web to **read a folder on your laptop** or **find an answer in your company wiki**. But the files are on your computer, and the wiki only opens when you are connected to the work VPN. The assistant cannot reach either just because you can.
+**Turn a local MCP server into an HTTP endpoint.** [Install mcptunnel](#install), then try this read-only folder example (requires [Node.js 22+](https://nodejs.org/en/download)):
 
-MCP servers give AI assistants tools for jobs like these. Many run as local programs, so a remote assistant cannot connect to them directly. **mcptunnel gives those local tools an HTTP address.** The assistant sends a request to that address, the tool runs on your machine, and its results go back to the assistant.
+```sh
+mkdir mcptunnel-demo
+printf 'Hello from mcptunnel!\n' > mcptunnel-demo/hello.txt
+mcptunnel run --allow-tool read_text_file --allow-tool list_directory -- \
+  npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./mcptunnel-demo
+# → http://localhost:8000/filesystem
+```
 
-- **An online assistant, your local files.** Run a filesystem MCP server with access to a folder you choose. Add `--public` to get a temporary HTTPS URL for a compatible remote AI client.
-- **An external assistant, your company's VPN.** Run an MCP server for your internal wiki or service on your VPN-connected work machine. That server accesses the company tools from there; mcptunnel carries the requests and results between it and the assistant.
+In your AI client's **Streamable HTTP** settings, paste the printed URL and set the `Authorization` header to the printed `Basic …` value. Ask it to list the directory and read `hello.txt`. Only reading files and listing directories are allowed.
 
-For the VPN example, your work machine must stay online and connected to the VPN, and its network must allow the outbound Cloudflare tunnel. Use tools and data your organization permits the external AI service to access.
+**Connecting from a remote AI service? Add `--public`** to get a temporary HTTPS URL:
 
-**Where the tools run matters.** If your desktop AI app runs tools on your computer, localhost is enough—even when the model itself is online. Use public HTTPS when the tool-calling client is remote. Your AI client needs [remote MCP support and compatible authentication](docs/CLIENT_COMPATIBILITY.md#copypaste-connection-configurations).
+```sh
+mcptunnel run --public --path /public-files \
+  --allow-tool read_text_file --allow-tool list_directory -- \
+  npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./mcptunnel-demo
+# → https://<random>.trycloudflare.com/public-files
+```
 
-## How it works
+Use the URL and Basic header printed by this command. Your computer must stay online. Local clients can use localhost; remote services need the public URL and [compatible authentication](docs/CLIENT_COMPATIBILITY.md#copypaste-connection-configurations).
 
-Run an existing MCP server on **localhost**, or add **`--public`** for a temporary Cloudflare HTTPS URL. mcptunnel bridges stdio to Streamable HTTP and keeps your servers running in the background.
+**Already have an MCP server command?** Put it after `--`, with mcptunnel options before it:
 
-- **One command to start.** The daemon starts automatically.
-- **One port, multiple servers.** Paths come from server names; choose your own path or port when needed.
-- **Authentication by default.** Both local and public endpoints require Basic authentication.
-- **Native binaries.** Windows, macOS and Linux. No Rust or Cargo required.
+```text
+mcptunnel run [options] -- <mcp-command> [args...]
+```
+
+The daemon starts automatically and manages the endpoint in the background. `run` is optional: `mcptunnel -- …` works too. For browser sessions or other in-memory state, add [`--keep-alive`](#keep-browser-state).
+
+<details>
+<summary>PowerShell and example version</summary>
+
+In PowerShell, replace the `printf` line with `Set-Content mcptunnel-demo/hello.txt 'Hello from mcptunnel!'` and put each `mcptunnel run` command on one line, omitting the trailing `\`.
+
+The [Filesystem MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) version is pinned to the verified example. npm marks this date-based release deprecated after moving to semantic versions. See the [verification record](docs/ENGINEERING_REPORT.md#pre-public-documentation-check--2026-10-22).
+
+</details>
 
 ## Install
 
@@ -63,38 +81,37 @@ The installer verifies downloads, installs `cloudflared` if missing and configur
 mcptunnel --version
 ```
 
-
 See [supported platforms and requirements](docs/USER_GUIDE.md#platform-requirements). Each MCP server also needs its own runtime.
 
-## Quick start
+## Connect your client
 
-Pass your MCP server command after `--`, with any mcptunnel options before it:
+Choose **Streamable HTTP**, paste the complete MCP URL, and set the `Authorization` header to the printed `Basic …` value. Save it privately; credentials are shown only at creation.
 
-```text
-mcptunnel [options] -- <mcp-command> [args...]
-```
+Local clients can use localhost. Remote services need the public HTTPS URL. See [client configurations](docs/CLIENT_COMPATIBILITY.md#copypaste-connection-configurations) for Codex, Claude Code, Cursor and other clients, including external OAuth. Codex CLI 0.146.0 has passed local Basic-authenticated discovery and a file read; other client/account flows remain unverified.
 
-Use the official [Filesystem MCP server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) for a read-only first connection. Install [Node.js 22+](https://nodejs.org/en/download), then create a directory containing only data you intend to share:
+## Why do you need this?
 
-```sh
-mkdir mcptunnel-demo
-printf 'Hello from mcptunnel!\n' > mcptunnel-demo/hello.txt
-mcptunnel --allow-tool read_text_file --allow-tool list_directory -- npx -y @modelcontextprotocol/server-filesystem@2026.8.31 ./mcptunnel-demo
-# → http://localhost:8000/filesystem
-```
+Your AI client may run somewhere your tools cannot: your files are on your laptop, or your company wiki is only reachable through your work VPN. **mcptunnel lets the client call an MCP server running on your machine over HTTP.** The tools run there, and their results go back to the client.
 
-In PowerShell, replace the `printf` line with `Set-Content mcptunnel-demo/hello.txt 'Hello from mcptunnel!'`. Connect with the printed Basic header, list the directory, and read `hello.txt`. The allowlist blocks write tools. File contents persist on disk between requests; the example does not depend on process memory. Use `--path /files`, `--port 9000`, or `--public` before `--` to change the endpoint or add temporary public HTTPS.
+- **Local files:** expose an MCP server with access to a folder you choose.
+- **Work VPN:** run an MCP server on your VPN-connected machine to access an internal wiki or service. The machine must stay connected, and its network must allow the outbound tunnel. Use tools and data your organization permits the external AI service to access.
 
-The package version is deliberately pinned to the recorded verified example. npm marks this date-based release deprecated because the package moved to semantic versions; this is not a recommendation to install an untested `latest`. The historical Node 22 verification and current local check are described in the [engineering report](docs/ENGINEERING_REPORT.md#pre-public-documentation-check--2026-10-22).
+<p align="center">
+  <img src="assets/mcptunnel-overview.svg" alt="mcptunnel connects a local stdio MCP server to an AI client over authenticated Streamable HTTP: localhost by default, or temporary public HTTPS with --public." width="1280" />
+</p>
 
-**Stateful servers:** by default, modern (`2026-07-28`) requests start a fresh upstream process per operation. Version **0.4.0** adds opt-in `--keep-alive` for authenticated browser or other in-memory workflows. Legacy initialized sessions continue to reuse one process. [Process lifetime and reset](docs/USER_GUIDE.md#keep-upstream-state).
+## How it works
+
+mcptunnel bridges **stdio → Streamable HTTP**. Endpoints use localhost by default; `--public` adds a temporary Cloudflare HTTPS URL. Both require Basic authentication by default.
+
+Multiple servers can share a port, each with its own path. Native binaries are available for Windows, macOS and Linux; no Rust or Cargo required.
 
 ## Keep browser state
 
 Install 0.4.0 or newer, then wrap a browser server with `--keep-alive`:
 
 ```sh
-mcptunnel --keep-alive --path /browser -- npx -y @playwright/mcp@0.0.84 --browser chrome --headless --isolated
+mcptunnel run --keep-alive --path /browser -- npx -y @playwright/mcp@0.0.84 --browser chrome --headless --isolated
 ```
 
 Use the printed HTTP URL and Basic header. Separate calls can use the same open page. One mount plus one authenticated owner/permission set shares a process; use separate mounts for independent workflows. The upstream still controls its own profile/storage isolation.
@@ -107,12 +124,6 @@ mcptunnel reset <mount>  # resets retained state for every owner of this mount
 ```
 
 Reset keeps the URL and credentials and leaves legacy sessions unchanged. Anonymous/inherit auth cannot use keep-alive. `--public` can still add temporary HTTPS to an authenticated mount. This feature adds process continuity; optional interactive MCP features and Quick Tunnel SSE remain unsupported. [Full lifecycle contract](docs/USER_GUIDE.md#keep-upstream-state).
-
-## Connect your client
-
-Choose **Streamable HTTP**, paste the complete MCP URL, and set the `Authorization` header to the printed `Basic …` value. Save it privately; credentials are shown only at creation.
-
-Local clients can use localhost. Remote services need the public HTTPS URL. See [client configurations](docs/CLIENT_COMPATIBILITY.md#copypaste-connection-configurations) for Codex, Claude Code, Cursor and other clients, including external OAuth. Codex CLI 0.146.0 has passed local Basic-authenticated discovery and a file read; other client/account flows remain unverified.
 
 ## Choose your endpoint
 
