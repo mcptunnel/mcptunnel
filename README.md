@@ -16,6 +16,10 @@
   <a href="docs/USER_GUIDE.md">Documentation</a>
 </p>
 
+<p align="center">
+  <img src="assets/mcptunnel-overview.svg" alt="mcptunnel connects a local stdio MCP server to an AI client over authenticated Streamable HTTP: localhost by default, or temporary public HTTPS with --public." width="1280" />
+</p>
+
 ## Why do you need this?
 
 Your AI client may run somewhere your tools cannot: your files are on your laptop, or your company wiki is only reachable through your work VPN. **mcptunnel lets the client call an MCP server running on your machine over HTTP.** The tools run there, and their results go back to the client.
@@ -98,10 +102,6 @@ Choose **Streamable HTTP**, paste the complete MCP URL, and set the `Authorizati
 Local clients can use localhost. Remote services need the public HTTPS URL. See [client configurations](docs/CLIENT_COMPATIBILITY.md#copypaste-connection-configurations) for Codex, Claude Code, Cursor and other clients, including external OAuth. Codex CLI 0.146.0 has passed local Basic-authenticated discovery and a file read; other client/account flows remain unverified.
 
 ## How it works
-
-<p align="center">
-  <img src="assets/mcptunnel-overview.svg" alt="mcptunnel connects a local stdio MCP server to an AI client over authenticated Streamable HTTP: localhost by default, or temporary public HTTPS with --public." width="1280" />
-</p>
 
 mcptunnel bridges **stdio → Streamable HTTP**. Endpoints use localhost by default; `--public` adds a temporary Cloudflare HTTPS URL. Both require Basic authentication by default.
 
